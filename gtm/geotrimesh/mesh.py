@@ -192,13 +192,13 @@ class ElevationMesh(object):
             
 
 
-                    l_message = ""
-                    for l_name in sorted(locals()):
-                        try:
-                            l_message += "\n{} = {}".format(l_name, json.dumps(locals()[l_name], indent=2))
-                        except:
-                            pass
-                    logger.warn(l_message)
+                    #l_message = ""
+                    #for l_name in sorted(locals()):
+                        #try:
+                            #l_message += "\n{} = {}".format(l_name, json.dumps(locals()[l_name], indent=2))
+                        #except:
+                            #pass
+                    #logger.warn(l_message)
 
 
                     logger.info('create temporary shapefile')
@@ -413,7 +413,7 @@ class ElevationMesh(object):
 
 
         logger.info('parsing polygon')
-        logger.info(locals())
+        #logger.info(locals())
 
 
         triangle_cnt=0
@@ -443,7 +443,7 @@ class ElevationMesh(object):
     
         (in_dem_clip_x_min, in_dem_clip_x_max, in_dem_clip_y_min, in_dem_clip_y_max) = in_in_boundary_polygon.GetEnvelope()
         (in_orthophoto_clip_x_min, in_orthophoto_clip_x_max, in_orthophoto_clip_y_min, in_orthophoto_clip_y_max) = in_in_boundary_polygon.GetEnvelope()
-        logger.info("GetEnvelope() = {}".format(in_in_boundary_polygon.GetEnvelope()))
+        #logger.info("GetEnvelope() = {}".format(in_in_boundary_polygon.GetEnvelope()))
     
         # clip one cell/row more than needed
         in_dem_clip_x_min-=in_dem_res_x
@@ -538,13 +538,13 @@ class ElevationMesh(object):
                 in_orthophoto_nodata = in_orthophoto_band_red.GetNoDataValue() 
                 in_orthophoto_nodata_ext = in_orthophoto_nodata
 
-            logger.info("in_orthophoto_band_red.GetMinimum()={}, in_orthophoto_band_red.GetMaximum()={}, in_orthophoto_band_red.GetOffset()={}".format(in_orthophoto_band_red.GetMinimum(), in_orthophoto_band_red.GetMaximum(), in_orthophoto_band_red.GetOffset()))
+            #logger.info("in_orthophoto_band_red.GetMinimum()={}, in_orthophoto_band_red.GetMaximum()={}, in_orthophoto_band_red.GetOffset()={}".format(in_orthophoto_band_red.GetMinimum(), in_orthophoto_band_red.GetMaximum(), in_orthophoto_band_red.GetOffset()))
 
-            logger.info("orthophoto_clip_array: %s %s %s %s (%s %s)", in_orthophoto_clip_col_min, in_orthophoto_clip_row_min,
-                                    in_orthophoto_clip_col_max - in_orthophoto_clip_col_min,
-                                    in_orthophoto_clip_row_max - in_orthophoto_clip_row_min,
-                                    in_orthophoto_clip_col_max, in_orthophoto_clip_row_max)
-            logger.info(locals())
+            #logger.info("orthophoto_clip_array: %s %s %s %s (%s %s)", in_orthophoto_clip_col_min, in_orthophoto_clip_row_min,
+            #                        in_orthophoto_clip_col_max - in_orthophoto_clip_col_min,
+            #                        in_orthophoto_clip_row_max - in_orthophoto_clip_row_min,
+            #                        in_orthophoto_clip_col_max, in_orthophoto_clip_row_max)
+            #logger.info(locals())
     
             in_orthophoto_array_red_clip = in_orthophoto_band_red.ReadAsArray(in_orthophoto_clip_col_min, in_orthophoto_clip_row_min,
                                               abs(in_orthophoto_clip_col_max - in_orthophoto_clip_col_min),
@@ -586,7 +586,7 @@ class ElevationMesh(object):
     
     
     
-        logger.info(in_orthophoto_array_red_clip)
+        #logger.info(in_orthophoto_array_red_clip)
     
     
     
@@ -1113,7 +1113,7 @@ class ElevationMesh(object):
 
        
         out_mesh = open(out_mesh_filename, 'w')
-        logger.info(out_mesh_filename)
+        #logger.info(out_mesh_filename)
     
         coords_array_x = numpy.empty(in_triangles_feature_count*3) * numpy.nan
         coords_array_y = numpy.empty(in_triangles_feature_count*3) * numpy.nan
@@ -1289,7 +1289,7 @@ class ElevationMesh(object):
         #colors_blue_perc_low = numpy.nanpercentile(colors_array_lut_blue_clean, 1)
         #colors_blue_perc_high = numpy.nanpercentile(colors_array_lut_blue_clean, 99)
 
-        logger.debug('orthophoto_bitdepth: {}'.format(orthophoto_bitdepth))
+        #logger.debug('orthophoto_bitdepth: {}'.format(orthophoto_bitdepth))
         for color_id, (color_red, color_green, color_blue) in enumerate(zip(colors_array_lut_red_clean, colors_array_lut_green_clean, colors_array_lut_blue_clean)):
 
             if orthophoto_bitdepth > 8:
