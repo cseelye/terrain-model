@@ -6,8 +6,10 @@ RUN apt-get update && \
         python \
         python-dev \
         software-properties-common && \
-    curl https://bootstrap.pypa.io/get-pip.py | python
-COPY requirements.txt /tmp/
+    curl https://bootstrap.pypa.io/get-pip.py | python && \
+    apt-get autoremove --assume-yes && \
+    apt-get clean && \
+    rm --force --recursive /var/lib/apt/lists/* /tmp/* /var/tmp/*
 RUN add-apt-repository -y ppa:ubuntugis/ppa && \
     apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes \
@@ -15,8 +17,10 @@ RUN add-apt-repository -y ppa:ubuntugis/ppa && \
         libgdal-dev \
         python-affine \
         python-gdal && \
-    pip install -r /tmp/requirements.txt && \
     apt-get autoremove --assume-yes && \
     apt-get clean && \
     rm --force --recursive /var/lib/apt/lists/* /tmp/* /var/tmp/*
+COPY requirements.txt /tmp/
+RUN pip install -r /tmp/requirements.txt && \
+    rm --force /tmp/requirements.txt
 COPY . /root/
