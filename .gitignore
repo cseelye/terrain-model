@@ -1,5 +1,15 @@
 work
 .DS_Store
+*.x3d
+*.tif
+*.tiff
+*.jp2
+*.png
+*.psd
+*.aux.xml
+*.gpx
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
