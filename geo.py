@@ -93,6 +93,30 @@ class GPXFile(object):
         min_lat, min_long, max_lat, max_long = self.GetBounds()
         return ( (max_lat - min_lat)/2, (max_long - min_long)/2 )
 
+    def GetTrackPoints(self):
+        tracks = []
+        tree = ET.parse(self.filename)
+        root = tree.getroot()
+        for track_node in root.findall("trk", root.nsmap):
+            track = []
+            for node in track_node.findall("trkseg/trkpt", root.nsmap):
+                node_lat = float(node.attrib["lat"])
+                node_long = float(node.attrib["lon"])
+                track.append((node_lat, node_long))
+            tracks.append(track)
+        return tracks
+
+    def ToCSV(self, csvfile):
+        tree = ET.parse(self.filename)
+        root = tree.getroot()
+        with open(csvfile, "w") as outfile:
+            outfile.write("LON,LAT\n")
+            for node in root.findall("trk/trkseg/trkpt", root.nsmap):
+                node_lat = float(node.attrib["lat"])
+                node_long = float(node.attrib["lon"])
+                outfile.write("{},{}\n".format(node_long, node_lat))
+
+
 def degree_long_to_miles(lat):
     """
     Calculate the length of 1 degree of longitude in miles at a given latitude
@@ -135,14 +159,6 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
     """
 
     log = GetLogger()
-
-#    log.debug("Convert and crop {} to {} at [{}, {}, {}, {}]".format(input_filename,
-#                                                       output_filename,
-#                                                       min_lat, min_long, max_lat, max_long))
-#    ds = gdal.Open(input_filename)
-#                                            #projWin=(ulx,      uly,     lrx,      lry)
-#                                            #         west      north    east      south
-#    ds = gdal.Translate(output_filename, ds, projWin=(min_long, max_lat, max_long, min_lat), format=output_type)
 
     ds = gdal.Open(input_filename)
     with tempfile.NamedTemporaryFile() as tf:
@@ -213,6 +229,6 @@ def get_raster_boundaries_gps(data_source):
     source_srs.ImportFromWkt(data_source.GetProjection())
     target_srs = source_srs.CloneGeogCS()
     trans = osr.CoordinateTransformation(source_srs, target_srs)
-    min_long, max_lat, zval = trans.TransformPoint(source_extent[0], source_extent[3])
-    max_long, min_lat, zval = trans.TransformPoint(source_extent[2], source_extent[1])
+    min_long, max_lat, zval = trans.TransformPoint(source_extent[0], source_extent[3], 0.0)
+    max_long, min_lat, zval = trans.TransformPoint(source_extent[2], source_extent[1], 0.0)
     return (min_lat, min_long, max_lat, max_long)

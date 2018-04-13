@@ -1,4 +1,5 @@
 #!/usr/bin/env python2.7
+"""Create a 3D model of terrain"""
 
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser, GetFirstLine
@@ -38,14 +39,14 @@ def build_model(gpx_file,
     Create a 3D model of terrain
 
     Args:
-        gpx_file:       A file containing one of more tracks to use to determine the area of terrain to model (string)
-        padding:        Padding to add around the GPX track, in miles (float)
-        min_lat         Southern boundary of the region to model (float)
-        min_long        Eastern boundary of the region to model (float)
-        max_lat         Northern boundary of the region to model (float)
-        max_long        Western boundary of the region to model (float)
-        model_file:     File name to write the 3D model to (str)
-        z_exaggeration: How much Z-axis exaggeration to apply to the model (float)
+        gpx_file:       (str)   A file containing one of more tracks to use to determine the area of terrain to model
+        padding:        (float) Padding to add around the GPX track, in miles
+        min_lat         (float) Southern boundary of the region to model
+        min_long        (float) Eastern boundary of the region to model
+        max_lat         (float) Northern boundary of the region to model
+        max_long        (float) Western boundary of the region to model
+        model_file:     (str)   File name to write the 3D model to
+        z_exaggeration: (float) How much Z-axis exaggeration to apply to the model
     """
     log = GetLogger()
 

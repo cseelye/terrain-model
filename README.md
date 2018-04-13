@@ -9,21 +9,31 @@ This is the typical steps that I follow to create a new model.  All of these com
 a host directory mounted at "work" to hold the input/output files
 1. Create the X3D model
 ```
-./build_model.py --gpx-file work/hitw.gpx --padding 0.2
+./build_model.py --gpx-file work/hitw.gpx \
+                 --padding 0.2 \
+                 --model-file work/hitw.x3d
 ```
 2. Download orthoimages from [The National Map](https://viewer.nationalmap.gov/basic/)
 3. Merge images if necessary to cover the entire area being modelled
 ```
 gdal_merge.py -of GTiff \
-              -o work/merged.tiff \
+              -o work/merged.tif \
               work/m_3911925_se_11_1_20150616_20150923.jp2 \
               work/m_3911933_ne_11_1_20150616_20150923.jp2
 ```
-4. Crop and convert the image
+4. Crop the image
 ```
-./crop-geophoto.py --gpx-file work/hitw.gpx \
+./crop_geophoto.py --gpx-file work/hitw.gpx \
                    --padding 0.2 \
-                   --input-file work/merged.tiff \
-                   --output-file work/hitw-sat.png
+                   --input-file work/merged.tif \
+                   --output-file work/cropped.tif
 ```
-5. Import the X3D model into blender, add some thickness to it, UV map the image onto it
+5. Overlay the tracks onto the image
+```
+./draw_track.py --gpx-file work/hitw.gpx \
+                --track-color red \
+                --track-width 10 \
+                --input-file work/cropped.tif \
+                --output-file work/hitw.png
+```
+6. Import the X3D model into blender, add some thickness to it, UV map the image onto it

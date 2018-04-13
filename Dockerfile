@@ -15,8 +15,8 @@ RUN add-apt-repository -y ppa:ubuntugis/ppa && \
     DEBIAN_FRONTEND=noninteractive apt-get install --assume-yes \
         gdal-bin \
         libgdal-dev \
-        python-affine \
-        python-gdal && \
+        python-gdal \
+        python-opencv && \
     apt-get autoremove --assume-yes && \
     apt-get clean && \
     rm --force --recursive /var/lib/apt/lists/* /tmp/* /var/tmp/*

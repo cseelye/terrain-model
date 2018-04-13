@@ -1,12 +1,14 @@
 #!/usr/bin/env python2.7
+"""Crop a spatial image to given coordinates and convert it to a GeoTIFF"""
 
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser, GetFirstLine
-from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType
+from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType, PositiveNonZeroIntegerType
 from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import InvalidArgumentError
-from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, degree_lat_to_miles, degree_long_to_miles, get_raster_boundaries_geo
 from osgeo import gdal, ogr, osr
+
+from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, degree_lat_to_miles, degree_long_to_miles, get_raster_boundaries_geo
 
 
 @logargs
@@ -31,8 +33,25 @@ def main(gpx_file,
          max_long,
          input_file,
          output_file):
+    """
+    Crop a geospatial image to the given coordinates and convert it to a GeoTIFF
+
+    Args:
+        gpx_file:       (str)   A file containing one of more tracks to use to determine the area of terrain to crop
+        padding:        (float) Padding to add around the GPX track, in miles
+        square:         (bool)  Make the region around the GPX track a square
+        min_lat         (float) Southern boundary of the region to crop
+        min_long        (float) Eastern boundary of the region to crop
+        max_lat         (float) Northern boundary of the region to crop
+        max_long        (float) Western boundary of the region to crop
+        input_file:     (str)   Geospatial image to crop, any format that GDAL can read
+        output_file:    (str)   Output file to create, in GeoTIFF format
+    """
 
     log = GetLogger()
+
+    if not output_file.endswith(".tif") and not output_file.endswith(".tiff"):
+        output_file += ".tif"
 
     # Determine the bounds of the output
     if gpx_file:
@@ -68,12 +87,13 @@ def main(gpx_file,
         log.info("Output boundary is outside of input boundary; adjusted output boundaries = TL({}, {}) BR({}, {})".format(min_long, max_lat, max_long, min_lat))
 
     # Crop and convert the image
-    convert_and_crop_raster(input_file, output_file, min_lat, min_long, max_lat, max_long, output_type="PNG", remove_alpha=True)
+    convert_and_crop_raster(input_file, output_file, min_lat, min_long, max_lat, max_long, output_type="GTiff", remove_alpha=True)
     log.passed("Successfully created {}".format(output_file))
+    return True
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Crop a geo raster image to the given lat/long coordinates and convert it to a PNG")
+    parser = ArgumentParser(description="Crop a spatial image to the given lat/long coordinates and convert it to a GeoTiff")
     area_group = parser.add_argument_group("Area specification", "The area to crop can be specified either with a GPX track or by absolute lat/long coordinates.")
     area_group.add_argument("-g", "--gpx-file", type=StrType, metavar="FILENAME", help="GPX file to use")
     area_group.add_argument("-p", "--padding", type=float, metavar="MILES", help="Padding to add around the GPX track, in miles")
@@ -83,7 +103,7 @@ if __name__ == '__main__':
     area_group.add_argument("-e", "--east", type=float, dest="max_long", metavar="DEGREES", help="The eastern edge of the model, in decimal degrees longitude")
     area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
     parser.add_argument("-i", "--input-file", type=StrType, metavar="FILENAME", help="Input file, in a raster format that GDAL can read")
-    parser.add_argument("-o", "--output-file", type=StrType, metavar="FILENAME", help="Output file (PNG format)")
+    parser.add_argument("-o", "--output-file", type=StrType, metavar="FILENAME", help="Output file (GeoTiff format)")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(main, args)

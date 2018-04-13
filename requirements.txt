@@ -4,3 +4,6 @@ lxml>=4.2.0
 numpy>=1.14.2
 pyapputil>=1.0.4
 scipy>=1.0.0
+pyshp>=1.2.12
+pngcanvas>=1.0.3
+webcolors>=1.8.1
