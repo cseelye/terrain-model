@@ -12,20 +12,15 @@ This is the typical steps that I follow to create a new model.  All of these com
                  --model-file work/hitw.x3d
 ```
 2. Download orthoimages from [The National Map](https://viewer.nationalmap.gov/basic/)
-3. Merge images into a single virtual dataset if necessary to cover the entire area being modelled
-```
-gdalbuildvrt merged.vrt
-             work/m_3911925_se_11_1_20150616_20150923.jp2 \
-             work/m_3911933_ne_11_1_20150616_20150923.jp2
-```
-4. Crop the image
+3. Crop the image(s)
 ```
 ./crop_geophoto.py --gpx-file work/hitw.gpx \
                    --padding 0.2 \
-                   --input-file work/merged.vrt \
-                   --output-file work/cropped.tif
+                   --output-file work/cropped.tif \
+                   --input-file work/m_3911925_se_11_1_20150616_20150923.jp2 \
+                   --input-file work/m_3911933_ne_11_1_20150616_20150923.jp2
 ```
-5. Overlay the tracks onto the image
+4. Overlay the tracks onto the image
 ```
 ./draw_track.py --gpx-file work/hitw.gpx \
                 --track-color red \
@@ -33,4 +28,4 @@ gdalbuildvrt merged.vrt
                 --input-file work/cropped.tif \
                 --output-file work/hitw.png
 ```
-6. Import the X3D model into blender, add some thickness to it, UV map the image onto it, export it and upload to [shapeways](https://www.shapeways.com) for printing
+5. Import the X3D model into blender, add some thickness to it, UV map the image onto it, export it and upload to [shapeways](https://www.shapeways.com) for printing
