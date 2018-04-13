@@ -2,13 +2,14 @@
 """Crop a spatial image to given coordinates and convert it to a GeoTIFF"""
 
 from pyapputil.appframework import PythonApp
-from pyapputil.argutil import ArgumentParser, GetFirstLine
-from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType, PositiveNonZeroIntegerType
+from pyapputil.argutil import ArgumentParser
+from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType, ItemList
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import InvalidArgumentError
-from osgeo import gdal, ogr, osr
-
-from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, degree_lat_to_miles, degree_long_to_miles, get_raster_boundaries_geo
+from pyapputil.exceptutil import InvalidArgumentError, ApplicationError
+from pyapputil.shellutil import Shell
+from osgeo import gdal
+import tempfile
+from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster
 
 
 @logargs
@@ -21,7 +22,7 @@ from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, deg
     "min_long" : (OptionalValueType(float), None),
     "max_lat" : (OptionalValueType(float), None),
     "max_long" : (OptionalValueType(float), None),
-    "input_file" : (StrType, None),
+    "input_files" : (ItemList(StrType), None),
     "output_file" : (StrType, None),
 })
 def main(gpx_file,
@@ -31,24 +32,36 @@ def main(gpx_file,
          min_long,
          max_lat,
          max_long,
-         input_file,
+         input_files,
          output_file):
     """
     Crop a geospatial image to the given coordinates and convert it to a GeoTIFF
 
     Args:
-        gpx_file:       (str)   A file containing one of more tracks to use to determine the area of terrain to crop
-        padding:        (float) Padding to add around the GPX track, in miles
-        square:         (bool)  Make the region around the GPX track a square
-        min_lat         (float) Southern boundary of the region to crop
-        min_long        (float) Eastern boundary of the region to crop
-        max_lat         (float) Northern boundary of the region to crop
-        max_long        (float) Western boundary of the region to crop
-        input_file:     (str)   Geospatial image to crop, any format that GDAL can read
-        output_file:    (str)   Output file to create, in GeoTIFF format
+        gpx_file:       (str)           A file containing one of more tracks to use to determine the area of terrain to crop
+        padding:        (float)         Padding to add around the GPX track, in miles
+        square:         (bool)          Make the region around the GPX track a square
+        min_lat         (float)         Southern boundary of the region to crop
+        min_long        (float)         Eastern boundary of the region to crop
+        max_lat         (float)         Northern boundary of the region to crop
+        max_long        (float)         Western boundary of the region to crop
+        input_files:    (list of str)   List of geospatial images to crop, any format that GDAL can read
+        output_file:    (str)           Output file to create, in GeoTIFF format
     """
 
     log = GetLogger()
+    gdal.UseExceptions()
+
+    # Build a virtual data set if there is more than one input file
+    if len(input_files) > 1:
+        log.info("Merging input files into virtual data set")
+        _, input_file = tempfile.mkstemp()
+        # The python interface to this is horrifying, so use the command line app
+        retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(input_file, " ".join(input_files)))
+        if retcode != 0 or "ERROR" in stderr:
+            raise ApplicationError("Could not merge input files: {}".format(stderr))
+    else:
+        input_file = input_files[0]
 
     if not output_file.endswith(".tif") and not output_file.endswith(".tiff"):
         output_file += ".tif"
@@ -102,7 +115,7 @@ if __name__ == '__main__':
     area_group.add_argument("-s", "--south", type=float, dest="min_lat", metavar="DEGREES", help="The southern edge of the model, in decimal degrees latitude")
     area_group.add_argument("-e", "--east", type=float, dest="max_long", metavar="DEGREES", help="The eastern edge of the model, in decimal degrees longitude")
     area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
-    parser.add_argument("-i", "--input-file", type=StrType, metavar="FILENAME", help="Input file, in a raster format that GDAL can read")
+    parser.add_argument("-i", "--input-file", dest="input_files", type=StrType, action="append", metavar="FILENAME", help="One or more input files, in a raster format that GDAL can read")
     parser.add_argument("-o", "--output-file", type=StrType, metavar="FILENAME", help="Output file (GeoTiff format)")
     args = parser.parse_args_to_dict()
 
