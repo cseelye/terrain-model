@@ -1,12 +1,10 @@
 # 3D Terrain Modelling
-This tool will create a 3D model in Blender given a set of GPS coordinates. This is still a work in progress, so not
-all of the steps are automated yet.
+This tool will create a 3D model in Blender given a set of GPS coordinates. This is still a work in progress, so not all of the steps are automated yet.
 
 I built this primarily to take a GPX route from a hike or four wheeling trip and create a full color, printable 3D model.
 
 ## Workflow
-This is the typical steps that I follow to create a new model.  All of these commands are run inside the container, with
-a host directory mounted at "work" to hold the input/output files
+This is the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files
 1. Create the X3D model
 ```
 ./build_model.py --gpx-file work/hitw.gpx \
