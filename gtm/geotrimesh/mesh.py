@@ -21,6 +21,12 @@
 ## URL: http://www.flatpolar.org
 ## 2017/06
 
+## *************************************************************
+##
+## Modified by Carl Seelye as part of https://github.com/cseelye/terrain-model
+##
+## *************************************************************
+
 from osgeo import gdal, ogr, osr
 import sys
 import os
