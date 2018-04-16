@@ -15,15 +15,15 @@ from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
-    "gpx_file" : (OptionalValueType(StrType), None),
+    "gpx_file" : (OptionalValueType(StrType()), None),
     "padding" : (float, 0),
-    "square" :  (BoolType, False),
+    "square" :  (BoolType(), False),
     "min_lat" : (OptionalValueType(float), None),
     "min_long" : (OptionalValueType(float), None),
     "max_lat" : (OptionalValueType(float), None),
     "max_long" : (OptionalValueType(float), None),
-    "input_files" : (ItemList(StrType), None),
-    "output_file" : (StrType, None),
+    "input_files" : (ItemList(StrType()), None),
+    "output_file" : (StrType(), None),
 })
 def main(gpx_file,
          padding,
@@ -108,15 +108,15 @@ def main(gpx_file,
 if __name__ == '__main__':
     parser = ArgumentParser(description="Crop a spatial image to the given lat/long coordinates and convert it to a GeoTiff")
     area_group = parser.add_argument_group("Area specification", "The area to crop can be specified either with a GPX track or by absolute lat/long coordinates.")
-    area_group.add_argument("-g", "--gpx-file", type=StrType, metavar="FILENAME", help="GPX file to use")
+    area_group.add_argument("-g", "--gpx-file", type=StrType(), metavar="FILENAME", help="GPX file to use")
     area_group.add_argument("-p", "--padding", type=float, metavar="MILES", help="Padding to add around the GPX track, in miles")
     area_group.add_argument("-q", "--square", action="store_true", help="Make the region around the GPX track a square")
     area_group.add_argument("-n", "--north", type=float, dest="max_lat", metavar="DEGREES", help="The northern edge of the model, in decimal degrees latitude")
     area_group.add_argument("-s", "--south", type=float, dest="min_lat", metavar="DEGREES", help="The southern edge of the model, in decimal degrees latitude")
     area_group.add_argument("-e", "--east", type=float, dest="max_long", metavar="DEGREES", help="The eastern edge of the model, in decimal degrees longitude")
     area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
-    parser.add_argument("-i", "--input-file", dest="input_files", type=StrType, action="append", metavar="FILENAME", help="One or more input files, in a raster format that GDAL can read")
-    parser.add_argument("-o", "--output-file", type=StrType, metavar="FILENAME", help="Output file (GeoTiff format)")
+    parser.add_argument("-i", "--input-file", dest="input_files", type=StrType(), action="append", metavar="FILENAME", help="One or more input files, in a raster format that GDAL can read")
+    parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Output file (GeoTiff format)")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(main, args)

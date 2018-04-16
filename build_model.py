@@ -16,14 +16,14 @@ import zipfile
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
-    "gpx_file" : (OptionalValueType(StrType), None),
+    "gpx_file" : (OptionalValueType(StrType()), None),
     "padding" : (float, 0),
-    "square" :  (BoolType, False),
+    "square" :  (BoolType(), False),
     "min_lat" : (OptionalValueType(float), None),
     "min_long" : (OptionalValueType(float), None),
     "max_lat" : (OptionalValueType(float), None),
     "max_long" : (OptionalValueType(float), None),
-    "model_file" : (OptionalValueType(StrType), None),
+    "model_file" : (OptionalValueType(StrType()), None),
     "z_exaggeration" : (float, 1.0),
 })
 def build_model(gpx_file,
@@ -119,15 +119,15 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long):
 if __name__ == '__main__':
     parser = ArgumentParser(description="Create a 3D model of terrain")
     area_group = parser.add_argument_group("Area specification", "The area covered by the model can be specified either with a GPX track or by absolute lat/long coordinates")
-    area_group.add_argument("-g", "--gpx-file", type=StrType, metavar="FILENAME", help="GPX file to use")
+    area_group.add_argument("-g", "--gpx-file", type=StrType(), metavar="FILENAME", help="GPX file to use")
     area_group.add_argument("-p", "--padding", type=float, metavar="MILES", help="Padding to add around the GPX track, in miles")
-    area_group.add_argument("-q", "--square", type=float, metavar="MILES", help="Make the region around the GPX track a square")
+    area_group.add_argument("-q", "--square", action="store_true", help="Make the region around the GPX track a square")
     area_group.add_argument("-n", "--north", type=float, dest="max_lat", metavar="DEGREES", help="The northern edge of the model, in decimal degrees latitude")
     area_group.add_argument("-s", "--south", type=float, dest="min_lat", metavar="DEGREES", help="The southern edge of the model, in decimal degrees latitude")
     area_group.add_argument("-e", "--east", type=float, dest="max_long", metavar="DEGREES", help="The eastern edge of the model, in decimal degrees longitude")
     area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
     parser.add_argument("-z", "--z-exaggeration", type=float, default=1.0, metavar="", help="Amount of z-axis exaggeration to use in the model")
-    parser.add_argument("-m", "--model-file", type=StrType, metavar="FILENAME", help="Model file to write out. If not specified, the name will be derived from the GPX file")
+    parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="Model file to write out. If not specified, the name will be derived from the GPX file")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(build_model, args)
