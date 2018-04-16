@@ -46,6 +46,7 @@ class GPXFile(object):
         Returns:
             A tuple of floats (min_lat, min_long, max_lat, max_long)
         """
+        log = GetLogger()
         tree = ET.parse(self.filename)
         root = tree.getroot()
         max_lat = -90.0
@@ -64,22 +65,26 @@ class GPXFile(object):
                 max_long = node_long
             if node_long < min_long:
                 min_long = node_long
-        center_lat, center_long = ( (max_lat - min_lat)/2, (max_long - min_long)/2 )
+        center_lat, center_long = ( (max_lat + min_lat)/2, (max_long + min_long)/2 )
+        log.debug2("GPX tracks min_lat={}, min_long={}, max_lat={}, max_long={}, center_lat={}, center_long={}".format(min_lat, min_long, max_lat, max_long, center_lat, center_long))
 
         if square:
             width = max_long - min_long
             height = max_lat - min_lat
             size = max(width, height)
+            log.debug("width={}, height={}, size={}".format(width, height, size))
             min_lat = center_lat - size/2
             max_lat = center_lat + size/2
             min_long = center_long - size/2
             max_long = center_long + size/2
+            log.debug2("Squared min_lat={}, min_long={}, max_lat={}, max_long={}".format(min_lat, min_long, max_lat, max_long))
 
         if padding != 0:
             min_lat -= padding / degree_lat_to_miles(center_lat)
             min_long -= padding / degree_long_to_miles(center_lat)
             max_lat += padding / degree_lat_to_miles(center_lat)
             max_long += padding / degree_long_to_miles(center_lat)
+            log.debug2("Padded min_lat={}, min_long={}, max_lat={}, max_long={}".format(min_lat, min_long, max_lat, max_long))
 
         return (min_lat, min_long, max_lat, max_long)
 
