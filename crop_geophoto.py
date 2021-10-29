@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3.8
 """Crop a spatial image to given coordinates and convert it to a GeoTIFF"""
 
 from pyapputil.appframework import PythonApp
@@ -9,7 +9,7 @@ from pyapputil.exceptutil import InvalidArgumentError, ApplicationError
 from pyapputil.shellutil import Shell
 from osgeo import gdal
 import tempfile
-from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster
+from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, GDAL_ERROR
 
 
 @logargs
@@ -50,7 +50,6 @@ def main(gpx_file,
     """
 
     log = GetLogger()
-    gdal.UseExceptions()
 
     # Build a virtual data set if there is more than one input file
     if len(input_files) > 1:
@@ -77,6 +76,7 @@ def main(gpx_file,
 
     # Open the file
     ds = gdal.Open(input_file)
+    GDAL_ERROR.check("Error parsing input file", ds)
 
     # Calculate the extent from the input file
     source_min_lat, source_min_long, source_max_lat, source_max_long = get_raster_boundaries_gps(ds)

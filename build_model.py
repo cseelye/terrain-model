@@ -1,17 +1,13 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3.8
 """Create a 3D model of terrain"""
 
 from pyapputil.appframework import PythonApp
-from pyapputil.argutil import ArgumentParser, GetFirstLine
+from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
-from util import HTTPDownloader
-from geo import GPXFile, convert_and_crop_raster, dem_to_model, degree_long_to_miles, degree_lat_to_miles
-import math
-import os
-import tempfile
-import zipfile
+from pyapputil.exceptutil import InvalidArgumentError
+from geo import GPXFile, get_dem_data, dem_to_model
+from pathlib import Path
 
 @logargs
 @ValidateAndDefault({
@@ -25,6 +21,7 @@ import zipfile
     "max_long" : (OptionalValueType(float), None),
     "model_file" : (OptionalValueType(StrType()), None),
     "z_exaggeration" : (float, 1.0),
+    "temp_dir" : (StrType(), "/tmp"),
 })
 def build_model(gpx_file,
                 padding,
@@ -34,7 +31,8 @@ def build_model(gpx_file,
                 max_lat,
                 max_long,
                 model_file,
-                z_exaggeration):
+                z_exaggeration,
+                temp_dir):
     """
     Create a 3D model of terrain
 
@@ -55,66 +53,24 @@ def build_model(gpx_file,
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
         min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
-        model_file = os.path.basename(gpx_file).split(".")[0] + ".x3d"
+    if not model_file:
+        model_file = Path(gpx_file).stem + ".x3d"
 
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to crop")
     if not model_file:
         raise InvalidArgumentError("model_file must be specified")
 
-    log.debug("Crop boundaries = TL({}, {}) BR({}, {})".format(min_long, max_lat, max_long, min_lat))
+    log.debug("Model boundaries = TL({}, {}) BR({}, {})".format(min_long, max_lat, max_long, min_lat))
 
     # Get the elevation data
-    dem_filename = "/tmp/demdata.tif"
+    dem_filename = Path(temp_dir) /  Path("{}_{}_{}_{}-demdata.tif".format(min_long, max_lat, max_long, min_lat))
     get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long)
 
     # Create the model from the elevation data
     log.info("Creating 3D model from elevation data")
     dem_to_model(dem_filename, model_file, z_exaggeration)
 
-
-def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long):
-    """
-    Get the elevation data for the given region. This will download, crop and convert the requested elevation data
-
-    Args:
-        dem_filename:   file to save the elevation data to
-        min_lat:        south border of the region
-        min_long:       east border of the region
-        max_lat:        north border of the region
-        max_long:       west border of the region
-    """
-    log = GetLogger()
-
-    workdir = tempfile.mkdtemp()
-    log.debug("workdir={}".format(workdir))
-
-    # Figure out which tile we need to download
-    upper = int(math.ceil(max_lat))
-    left = int(math.floor(max_long))
-    basename = "{}{}{}{}".format("n" if upper > 0 else "s",
-                                            abs(upper),
-                                            "e" if left > 0 else "w",
-                                            abs(left))
-    remote_filename = basename + ".zip"
-    local_filename = os.path.join(workdir, remote_filename)
-
-    # Download the tile
-    log.info("Downloading USGS elevation data")
-    downloader = HTTPDownloader("prd-tnm.s3.amazonaws.com", port=443)
-    downloader.StreamingDownload("StagedProducts/Elevation/13/ArcGrid/{}".format(remote_filename), local_filename, timeout=60*20)
-
-    # Extract the ArcGrid data
-    log.info("Extracting elevation data file")
-    log.debug("Extracting {} to {}".format(local_filename, workdir))
-    archive = zipfile.ZipFile(local_filename)
-    archive.extractall(path=workdir)
-    input_data = os.path.join(workdir, "grd" + basename + "_13")
-    if not os.path.exists(input_data):
-        raise ApplicationError("Could not find ArcGrid data in downloaded archive")
-
-    log.info("Converting and cropping elevation data")
-    convert_and_crop_raster(input_data, dem_filename, min_lat, min_long, max_lat, max_long)
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Create a 3D model of terrain")
@@ -128,6 +84,7 @@ if __name__ == '__main__':
     area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
     parser.add_argument("-z", "--z-exaggeration", type=float, default=1.0, metavar="", help="Amount of z-axis exaggeration to use in the model")
     parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="Model file to write out. If not specified, the name will be derived from the GPX file")
+    parser.add_argument("-t", "--temp-dir", type=StrType(), metavar="DIRNAME", help="Directory to keep temp/working files in. Reusing these files can speed up multiple runs against the same input")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(build_model, args)
