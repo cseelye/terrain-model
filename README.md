@@ -1,5 +1,5 @@
 # 3D Terrain Modelling
-This tool will create a 3D model in Blender given a set of GPS coordinates. This is still a work in progress, so not there are bugs and not everything is automated yet.
+This tool will create a 3D model in Blender given a set of GPS coordinates. This is still a work in progress, so there are bugs and not everything is automated yet.
 
 I built this primarily to take a GPX route from a hike or four wheeling trip and create a full color, printable 3D model.
 
