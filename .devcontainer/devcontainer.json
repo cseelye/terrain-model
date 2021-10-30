@@ -1,0 +1,14 @@
+{
+	"name": "terrain-model dev container",
+	"context": "..",
+	"build": {
+		"target": "dev"
+	},
+	"dockerFile": "../Dockerfile",
+	"settings": { 
+		"terminal.integrated.shell.linux": null
+	},
+	"extensions": [
+		"ms-python.python"
+	]
+}
