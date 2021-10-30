@@ -94,12 +94,15 @@ COPY --from=build /root/.local /root/.local
 FROM prod as dev
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
-    install --yes \
+    apt-get install --yes \
         git \
+        python3-distutils \
+        python3.9-distutils \
         && \
-    apt-get autoremove --yes && \
-    apt-get clean && \
-    rm --force --recursive /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    curl https://bootstrap.pypa.io/get-pip.py | python3 && \
+    curl https://bootstrap.pypa.io/get-pip.py | python3.9
 COPY requirements*.txt /tmp/
-RUN pip install --upgrade --requirement /tmp/requirements-dev.txt && \
+RUN python3 -m pip install --no-cache-dir --upgrade --user --requirement /tmp/requirements-dev.txt && \
+    python3.9 -m pip install --no-cache-dir --upgrade --user --requirement /tmp/requirements-dev.txt && \
     rm --force /tmp/requirements*.txt
