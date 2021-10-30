@@ -1,6 +1,14 @@
-work
+work*
+output
+tmp
+buildfiles/blender*
+buildfiles/gdal*
 .DS_Store
 *.x3d
+*.dbf
+*.prj
+*.shp
+*.shx
 *.tif
 *.tiff
 *.jp2
