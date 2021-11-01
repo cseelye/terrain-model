@@ -26,7 +26,6 @@
 ## Modified by Carl Seelye as part of https://github.com/cseelye/terrain-model
 ##
 ## *************************************************************
-from __future__ import print_function
 from osgeo import gdal, ogr, osr
 import sys
 import os
@@ -38,31 +37,24 @@ import argparse
 import json
 import time
 
+from pyapputil.logutil import GetLogger
 from util import ProgressTracker
 
-#logging.basicConfig(level=logging.INFO)
-#logger = logging.getLogger(__name__)
 
 logger = None
 
 class ElevationMesh(object):
 
     def __init__(self, log=None):
-        #gdal.UseExceptions()
         global logger
         if log:
             logger = log
         if not logger:
-            logger = logging.getLogger(__name__)
+            logger = GetLogger()
 
-
-    def generate_mesh(self, dem=None, orthophoto=None, boundaries=None, dem_nodata=None, orthophoto_nodata=None, tiles_size=None, tiles_bbox=None, mesh_prefix='out',
+    def generate_mesh(self, dem, orthophoto=None, boundaries=None, dem_nodata=None, orthophoto_nodata=None, tiles_size=None, tiles_bbox=None, mesh_prefix='out',
                         mesh_path=os.path.join(os.getcwd(),'out'), mesh_shapefile=False, scale_xy=None, z_exaggeration=1.0, projection='orig', centering=True, indexed_colors=False,
                         coloring_mode='orthophoto', mesh_format='x3d', orthophoto_bitdepth=8, tiles_naming_convention='xy', force_out_mesh_overwrite=True):
-
-        if dem==None:
-            logger.error('A DEM is required. Exiting.')
-            sys.exit()
 
         if not os.path.exists(mesh_path):
             os.makedirs(mesh_path)
@@ -338,7 +330,7 @@ class ElevationMesh(object):
                         for in_boundaries_feat_id, in_boundaries_feat in enumerate(in_boundaries_layer):
 
                             in_boundaries_geom = in_boundaries_feat.GetGeometryRef()
-#                            in_boundaries_geomtype = in_boundaries_geom.GetGeometryName()
+                           # in_boundaries_geomtype = in_boundaries_geom.GetGeometryName()
 
 
                             #status_perc = (((tile_x * tile_y * in_boundaries_feat_id) + in_boundaries_feat_id) * 100) / (in_dem_tiles_x_total * in_dem_tiles_y_total * in_boundaries_featcount)
@@ -412,15 +404,11 @@ class ElevationMesh(object):
                         except:
                             pass
 
-
-
-
-
     def parse_polygon(self, in_in_boundary_polygon, in_dem, in_orthophoto, out_triangles_layer, out_triangles_layer_feature_defn, in_dem_nodata_ext, in_orthophoto_nodata_ext, in_dem_res_x, in_dem_res_y, in_dem_extent_x_min, in_dem_extent_x_max, in_dem_extent_y_min, in_dem_extent_y_max, in_dem_cols, in_dem_rows,
             in_orthophoto_extent_x_min, in_orthophoto_extent_x_max, in_orthophoto_extent_y_min, in_orthophoto_extent_y_max, in_orthophoto_res_x, in_orthophoto_res_y, in_orthophoto_cols, in_orthophoto_rows, coloring_mode, in_dem_stats_minmax, in_orthophoto_stats_minmax, mesh_format, out_log_filename, orthophoto_bitdepth):
 
 
-        logger.info('Converting pointcloud to mesh - this may take a few minutes')
+        logger.info('Converting pointcloud to mesh...')
         #logger.debug(locals())
 
 
@@ -927,10 +915,6 @@ class ElevationMesh(object):
 
         return out_triangles_layer, out_triangles_minmax_poly_total
 
-
-
-
-
     def calculate_ecef_from_lla(self, lon, lat, h):
 
         ## convert LLA (latitude/longitude/altitude) to ECEF (earth-centered/earth-fixed)
@@ -957,8 +941,6 @@ class ElevationMesh(object):
 
 
         return x,y,z
-
-
 
     def get_z_coord_of_point(self, searchpoint, triangle_abc):
         ## Get a z-coordinate of a point within a triangle
@@ -988,10 +970,6 @@ class ElevationMesh(object):
         searchpoint_z = triangle_a_z + (fraction1 * (searchpoint_y - triangle_a_y)) - (fraction2 * (searchpoint_x - triangle_a_x))
 
         return searchpoint_z
-
-
-
-
 
     def ogr_to_elevation_mesh(self, in_dem, in_orthophoto, in_geometry, in_boundaries_spatialref, in_geometry_feature_defn, in_dem_nodata_ext, in_otho_nodata_ext, out_triangles_layer,
                                 indexed_colors, coloring_mode, in_dem_stats_minmax, in_orthophoto_stats_minmax, mesh_format, out_log_filename, orthophoto_bitdepth):
@@ -1107,11 +1085,6 @@ class ElevationMesh(object):
 
 
         return out_triangles_minmax_geom_total
-
-
-
-
-
 
     def conv_triangle_shape_to_mesh(self, in_triangles_layer, out_mesh_filename, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total, mesh_format, in_boundaries_centroid, orthophoto_bitdepth, force_out_mesh_overwrite):
 
@@ -1266,6 +1239,7 @@ class ElevationMesh(object):
         unique_nodecolors_cnt=0
 
 
+        covered_coords = []
         indexed_colors = False
         if indexed_colors == False:
             progress = ProgressTracker(len(coords_array_x))
@@ -1276,12 +1250,12 @@ class ElevationMesh(object):
                 color_red, color_green, color_blue, color_alpha = colors_array_red[coord_id], colors_array_green[coord_id], colors_array_blue[coord_id], colors_array_alpha[coord_id]
 
 
-                if not numpy.isnan(coord_x):
+                if not numpy.isnan(coord_x) and not numpy.isnan(coord_y) and not numpy.isnan(coord_z):
 
                     coord_locations = numpy.where(  ( coords_array_x[:] == round(coord_x,16) ) &
                                                     ( coords_array_y[:] == round(coord_y,16) ) &
                                                     ( coords_array_z[:] == round(coord_z,16) ) )
-
+                    covered_coords.append(coord_locations)
                     #for coord_location in coord_locations:
                     coords_array_x[coord_locations] = numpy.nan
                     coords_array_y[coord_locations] = numpy.nan
@@ -1301,6 +1275,7 @@ class ElevationMesh(object):
                     unique_nodecoords_cnt+=1
                 progress.update(coord_id+1)
 
+        logger.debug("covered_coords = {}".format(covered_coords))
 
         logger.info("cleaning lut arrays")
         coords_array_lut_x_clean = coords_array_lut_x[numpy.logical_not(numpy.isnan(coords_array_lut_x))]
@@ -1384,13 +1359,24 @@ class ElevationMesh(object):
             try:
                 return int(a)
             except (TypeError, ValueError):
-                return 0
+                return a
 
         nodecoords_list = nodecoords_array[0:unique_nodecoords_cnt*3].tolist()
 
-#        nodecoords_list_int = [ toint(item) for item in nodecoords_list]
+        # logger.debug("nodecoords_list ({})".format(len(nodecoords_list)))
+        # outstr = None
+        # for idx, coord in enumerate(nodecoords_list):
+        #     if outstr is None:
+        #         outstr = ""
+        #     outstr += " {}:{}".format(idx, coord)
 
-        nodecoords_list_int = list(map(int, nodecoords_list))
+        #     if idx > 0 and idx % 15 == 0:
+        #         logger.debug2(outstr)
+        #         outstr = ""
+
+        # nodecoords_list_int = [ toint(item) for item in nodecoords_list]
+        # nodecoords_list_int = list(map(int, nodecoords_list))
+        nodecoords_list_int = nodecoords_list
 
         nodecoords_list_int_triples = []
 
@@ -1399,7 +1385,7 @@ class ElevationMesh(object):
             nodecoords_list_int_triples.append(nodecoord_triple)
 
 
-#        logger.debug('nodecoords_list_int_triples {}'.format(len(nodecoords_list_int_triples)))
+       # logger.debug('nodecoords_list_int_triples {}'.format(len(nodecoords_list_int_triples)))
 
 
         for nodecoords_triples_id, nodecoord_triple in enumerate(nodecoords_list_int_triples):
@@ -1416,7 +1402,7 @@ class ElevationMesh(object):
                 normal[2] += (coords_array_lut_x[nodecoord_triple[i]] - coords_array_lut_x[nodecoord_triple[j]]) * (coords_array_lut_y[nodecoord_triple[i]] + coords_array_lut_y[nodecoord_triple[j]])
 
             normal_normalized = [normal_elem/sum(normal) for normal_elem in normal]
-#            logger.debug('normal_normalized {}'.format(normal_normalized))
+           # logger.debug('normal_normalized {}'.format(normal_normalized))
 
             normals_array_lut_x[nodecoord_triple[0]] = normal_normalized[0]
             normals_array_lut_y[nodecoord_triple[0]] = normal_normalized[1]
@@ -1484,8 +1470,6 @@ class ElevationMesh(object):
 
 
         out_mesh.close()
-
-
 
     def transform_coords(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total, in_boundaries_centroid):
 
@@ -1668,748 +1652,6 @@ class ElevationMesh(object):
             coords_array_lut_z_trans.append(z_out)
 
         return coords_array_lut_x_trans, coords_array_lut_y_trans, coords_array_lut_z_trans
-
-
-
-
-
-
-    def write_vtu(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
-
-        ## in Paraview: Deactivate 'Map Scalars' !!
-
-
-        #logger.debug(nodecoords_array[:5])
-        #sys.exit()
-
-        logger.info('writing vtk')
-
-        coords_array_lut_x, coords_array_lut_y, coords_array_lut_z = coords_arrays_lut
-        colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha = colors_arrays_lut
-
-
-
-
-        triangles_x_min_total, triangles_x_max_total, triangles_y_min_total, triangles_y_max_total, triangles_z_min_total, triangles_z_max_total = aoi3d
-
-        nodecoords_list = nodecoords_array.tolist()
-
-        nodecoords_list_int = list(map(int, nodecoords_list))
-        nodecoords_list_int_max = max(nodecoords_list_int)
-
-
-        #logger.debug('coords {} {}'.format(len(nodecoords_list_int), nodecoords_list_int_max))
-
-
-        #sys.exit()
-
-
-        nodecoords_list_int_triples = []
-
-        a=1
-        if a==1:
-
-            for i in range(0, len(nodecoords_list_int), 3):
-                nodecoords_list_int_triple = [nodecoords_list_int[i], nodecoords_list_int[i+1], nodecoords_list_int[i+2]]
-                nodecoords_list_int_triples.append(nodecoords_list_int_triple)
-
-
-            out_mesh.write('<VTKFile type="UnstructuredGrid" version="1.0" byte_order="LittleEndian" header_type="UInt64">' + '\n')
-            out_mesh.write('  <UnstructuredGrid>' + '\n')
-            out_mesh.write('    <Piece NumberOfPoints="' + str(len(coords_array_lut_x)) + '" NumberOfCells="' + str(len(nodecoords_list_int_triples)) + '">' + '\n')
-
-
-            if indexed_colors == True:
-
-                nodecolors_list = nodecolors_array.tolist()
-                nodecolors_list_int = map(int, nodecolors_list)
-                nodecolors_list_int_max = max(nodecolors_list_int)
-                logger.debug('colors {} {}'.format(len(nodecolors_list_int), nodecolors_list_int_max))
-                nodecolors_list_int_triples = []
-
-
-                for i in range(0, len(nodecoords_list_int), 3):
-                    nodecolors_list_int_triple = [nodecolors_list_int[i], nodecolors_list_int[i+1], nodecolors_list_int[i+2]]
-                    nodecolors_list_int_triples.append(nodecolors_list_int_triple)
-
-                color_id_max = int(max(nodecolors_list))
-                color_id_min = int(min(nodecolors_list))
-
-
-
-
-
-                out_mesh.write('      <PointData Scalars="ScalarsPoints_">' + '\n')
-                out_mesh.write('        <DataArray type="Int64" Name="ScalarsPoints_" format="ascii" NumberOfComponents="1" RangeMin="' +  str(min(nodecolors_list_int)) + '" RangeMax="' +  str(max(nodecolors_list_int)) + '">' + '\n')
-                out_mesh.write('          ')
-
-                for coord_id in range(0,nodecoords_list_int_max+1):
-
-                    for coord_id_orig in range(0,len(nodecoords_list_int)+1):
-                        if nodecoords_list_int[coord_id_orig] == coord_id:
-
-                            node0_index = nodecolors_list_int[coord_id_orig]
-
-                            out_mesh.write(str(node0_index) + ' ')
-                            break
-
-
-                out_mesh.write('' + '\n')
-                out_mesh.write('        </DataArray>' + '\n')
-                out_mesh.write('      </PointData>' + '\n')
-
-
-            else:
-
-                out_mesh.write('      <PointData Scalars="Colors">' + '\n')
-                out_mesh.write('        <DataArray type="UInt8" Name="Colors" format="ascii" RangeMin="0" RangeMax="255" NumberOfComponents="3">' + '\n')
-                out_mesh.write('          ')
-
-                logger.debug('colors: {}'.format(len(colors_array_lut_red)))
-                for color_lut_id, (color_lut_red, color_lut_green, color_lut_blue, color_lut_alpha) in enumerate(zip(colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha)):
-
-                    out_mesh.write(str(int(color_lut_red * 100 * 2.55)) + ' ' + str(int(color_lut_green * 100 * 2.55)) + ' ' + str(int(color_lut_blue * 100 * 2.55)) + ' ' )
-                    #out_mesh.write(str(color_lut_red) + ' ' + str(color_lut_green) + ' ' + str(color_lut_blue) + ' ' )
-
-
-                out_mesh.write('' + '\n')
-                out_mesh.write('        </DataArray>' + '\n')
-                out_mesh.write('      </PointData>' + '\n')
-
-
-            out_mesh.write('      <Points>' + '\n')
-            out_mesh.write('        <DataArray type="Float32" Name="Points" NumberOfComponents="3" format="ascii" RangeMin="' + str(min(triangles_x_min_total, triangles_y_min_total, triangles_z_min_total)) + '" RangeMax="' + str(max(triangles_x_max_total, triangles_y_max_total, triangles_z_max_total)) + '">' + '\n')
-
-
-            out_mesh.write('          ')
-
-            logger.debug('points:{}'.format(len(coords_array_lut_x)))
-            for coord_lut_id, (coord_lut_x, coord_lut_y, coord_lut_z) in enumerate(zip(coords_array_lut_x, coords_array_lut_y, coords_array_lut_z)):
-                #out_mesh.write('1' + ' ' )
-                out_mesh.write(str(coord_lut_x) + ' ' + str(coord_lut_y) + ' ' + str(coord_lut_z) + ' ')
-
-
-            out_mesh.write('' + '\n')
-
-            out_mesh.write('        </DataArray>' + '\n')
-            out_mesh.write('      </Points>' + '\n')
-            out_mesh.write('      <Cells>' + '\n')
-            out_mesh.write('        <DataArray type="Int64" Name="connectivity" format="ascii" RangeMin="' +  str(int(min(nodecoords_list))) + '" RangeMax="' +  str(int(max(nodecoords_list))) + '">' + '\n')
-            #out_mesh.write('        <DataArray type="Int64" Name="connectivity" format="ascii" RangeMin="0" RangeMax="1">' + '\n')
-
-            out_mesh.write('          ')
-            for nodecoords_list_int_triple_id, nodecoords_list_int_triple in enumerate(nodecoords_list_int_triples):
-                nodecoord1, nodecoord2, nodecoord3 = nodecoords_list_int_triple
-                out_mesh.write(str(nodecoord1) + ' ' + str(nodecoord2) + ' ' + str(nodecoord3) + ' ')
-
-                #if round(nodecoords_list_int_triple_id % 2,2) != 0.00:
-                #    out_mesh.write('' + '\n')
-                #    if nodecoords_list_int_triple_id < len(nodecoords_list_int_triples) -1:
-                #        out_mesh.write('          ')
-
-            out_mesh.write('' + '\n')
-
-            out_mesh.write('        </DataArray>' + '\n')
-
-
-            out_mesh.write('        <DataArray type="Int64" Name="offsets" format="ascii" RangeMin="' + '3' + '" RangeMax="' + str(len(nodecoords_list_int_triples)*3) + '">' + '\n')
-
-            out_mesh.write('          ')
-            for nodecoords_list_int_triple_id, nodecoords_list_int_triple in enumerate(nodecoords_list_int_triples):
-                out_mesh.write(str((nodecoords_list_int_triple_id+1)*3) + ' ')
-
-                #if round((nodecoords_list_int_triple_id +1) % 6,2) == 0.00:
-                #    out_mesh.write('' + '\n')
-                #    if nodecoords_list_int_triple_id < len(nodecoords_list_int_triples) -1:
-                #        out_mesh.write('          ')
-
-            out_mesh.write('' + '\n')
-
-            out_mesh.write('        </DataArray>' + '\n')
-            out_mesh.write('        <DataArray type="UInt8" Name="types" format="ascii" RangeMin="5" RangeMax="5">' + '\n')
-
-
-            out_mesh.write('          ')
-            for nodecoords_list_int_triple_id, nodecoords_list_int_triple in enumerate(nodecoords_list_int_triples):
-                out_mesh.write('5' + ' ')
-
-                #if round((nodecoords_list_int_triple_id +1) % 6,2) == 0.00:
-                #    out_mesh.write('' + '\n')
-                #    if nodecoords_list_int_triple_id < len(nodecoords_list_int_triples) -1:
-                #        out_mesh.write('          ')
-
-
-
-            out_mesh.write('' + '\n')
-
-            out_mesh.write('        </DataArray>' + '\n')
-            out_mesh.write('      </Cells>' + '\n')
-            out_mesh.write('    </Piece>' + '\n')
-            out_mesh.write('  </UnstructuredGrid>' + '\n')
-            out_mesh.write('</VTKFile>' + '\n')
-
-
-            if indexed_colors == True:
-
-                out_ctable = open(os.path.splitext(out_mesh_filename)[0] + '_ctable.json', 'w')
-                out_ctable_filename = os.path.splitext(os.path.basename(out_mesh_filename))[0]
-
-                out_ctable.write('[' + '\n')
-                out_ctable.write('   {' + '\n')
-                out_ctable.write('      "ColorSpace" : "Diverging",' + '\n')
-                out_ctable.write('      "Name" : "' + out_ctable_filename + '",' + '\n')
-                out_ctable.write('      "NanColor" : [ 1, 1, 0 ],' + '\n')
-                out_ctable.write('      "RGBPoints" : [' + '\n')
-
-
-                separation_char = ','
-                logger.debug('colors {}'.format(len(colors_array_lut_red)))
-
-
-                for nodecolor_id, nodecolor in enumerate(range(0,len(colors_array_lut_red))):
-
-
-                    if nodecolor_id == len(colors_array_lut_red)-1:
-                        separation_char = ''
-
-                    #out_ctable.write(str(int(i)) + ',' + str(colors_array_lut_red[test]) + ',' + str(colors_array_lut_green[test]) + ',' + str(colors_array_lut_blue[test]) + separation_char)
-                    out_ctable.write('         ' + str(int(nodecolor_id)) + ',' + str(colors_array_lut_red[nodecolor_id]) + ',' + str(colors_array_lut_green[nodecolor_id]) + ',' + str(colors_array_lut_blue[nodecolor_id]) + separation_char + '\n')
-
-                out_ctable.write('' + '\n')
-
-                out_ctable.write('      ]' + '\n')
-                out_ctable.write('   }' + '\n')
-                out_ctable.write(']' + '\n')
-
-                out_ctable.close()
-                #"""
-
-
-
-
-
-
-    def write_python_vtkpfd(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
-
-        logger.info('writing maplotlib python file')
-
-        coords_array_lut_x, coords_array_lut_y, coords_array_lut_z = coords_arrays_lut
-        colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha = colors_arrays_lut
-
-
-        coords_list=[]
-        for coord_id, (coord_x, coord_y, coord_z) in enumerate(zip(coords_array_lut_x, coords_array_lut_y, coords_array_lut_z)):
-            coords_list.append((coord_x, coord_y, coord_z))
-
-        colors_list=[]
-        for color_id, (color_red, color_green, color_blue, color_alpha) in enumerate(zip(colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha)):
-            colors_list.append(( int(round(color_red*255,0)), int(round(color_green*255,0)), int(round(color_blue*255,0)), int(round(color_alpha*255,0)) ))
-
-
-
-        nodecoords_list = nodecoords_array.tolist()
-        nodecoords_list_int = list(map(int, nodecoords_list))
-
-        nodecoords_list_int_triples = []
-
-        for nodecoord_id in range(0, len(nodecoords_list_int), 3):
-            nodecoord_triple = (nodecoords_list_int[nodecoord_id], nodecoords_list_int[nodecoord_id+1], nodecoords_list_int[nodecoord_id+2])
-            nodecoords_list_int_triples.append(nodecoord_triple)
-
-
-        coords_array_lut_x_min = min(coords_array_lut_x)
-        coords_array_lut_x_max = max(coords_array_lut_x)
-        coords_array_lut_y_min = min(coords_array_lut_y)
-        coords_array_lut_y_max = max(coords_array_lut_y)
-        coords_array_lut_z_min = min(coords_array_lut_z)
-        coords_array_lut_z_max = max(coords_array_lut_z)
-
-        coords_array_lut_x_mean = (coords_array_lut_x_min + coords_array_lut_x_max) / 2.0
-        coords_array_lut_y_mean = (coords_array_lut_y_min + coords_array_lut_y_max) / 2.0
-        coords_array_lut_z_mean = (coords_array_lut_z_min + coords_array_lut_z_max) / 2.0
-
-
-        coords_array_lut_x_dist = coords_array_lut_x_max - coords_array_lut_x_min
-        coords_array_lut_y_dist = coords_array_lut_y_max - coords_array_lut_y_min
-        coords_array_lut_z_dist = coords_array_lut_z_max - coords_array_lut_z_min
-
-        coords_array_lut_xy_dist_max = max(coords_array_lut_x_dist, coords_array_lut_y_dist)
-
-        coords_array_lut_x_dist_margin = (coords_array_lut_xy_dist_max - coords_array_lut_x_dist) / 2.0
-        coords_array_lut_y_dist_margin = (coords_array_lut_xy_dist_max - coords_array_lut_y_dist) / 2.0
-        coords_array_lut_z_dist_margin = (coords_array_lut_z_dist - coords_array_lut_z_dist) / 2.0
-
-
-        coords_grid_list = [(coords_array_lut_x_min, coords_array_lut_y_min, coords_array_lut_z_min), (coords_array_lut_x_max, coords_array_lut_y_min, coords_array_lut_z_min), (coords_array_lut_x_max, coords_array_lut_y_max, coords_array_lut_z_min), (coords_array_lut_x_min, coords_array_lut_y_max, coords_array_lut_z_min)]
-        colors_grid_list = [(127, 127, 127, 255), (127, 127, 127, 255), (127, 127, 127, 255), (127, 127, 127, 255)]
-        nodecoords_grid_list_int_triples = [(0, 1, 2, 3)]
-
-        out_mesh.write('import numpy as np' + '\n')
-        out_mesh.write('import vtk' + '\n')
-
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('coords_list = ' + str(coords_list) + '\n')
-        out_mesh.write('colors_list = ' + str(colors_list) + '\n')
-        out_mesh.write('triangles_list = ' + str(nodecoords_list_int_triples) + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('coords_grid_list = ' + str(coords_grid_list) + '\n')
-        out_mesh.write('colors_grid_list = ' + str(colors_grid_list) + '\n')
-        out_mesh.write('quads_grid_list = ' + str(nodecoords_grid_list_int_triples) + '\n')
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('points = vtk.vtkPoints()' + '\n')
-        out_mesh.write('colors = vtk.vtkUnsignedCharArray()' + '\n')
-        out_mesh.write('colors.SetNumberOfComponents(3)' + '\n')
-
-        out_mesh.write('points_grid = vtk.vtkPoints()' + '\n')
-        out_mesh.write('colors_grid = vtk.vtkUnsignedCharArray()' + '\n')
-        out_mesh.write('colors_grid.SetNumberOfComponents(3)' + '\n')
-
-        out_mesh.write('for coord_id, (coord, color) in enumerate(zip(coords_list, colors_list)):' + '\n')
-        out_mesh.write('    points.InsertNextPoint(coord[0], coord[1], coord[2])' + '\n')
-        out_mesh.write('    colors.InsertNextTuple3(color[0], color[1], color[2])' + '\n')
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('for coord_grid_id, (coord_grid, color_grid) in enumerate(zip(coords_grid_list, colors_grid_list)):' + '\n')
-        out_mesh.write('    points_grid.InsertNextPoint(coord_grid[0], coord_grid[1], coord_grid[2])' + '\n')
-        out_mesh.write('    colors.InsertNextTuple3(color_grid[0], color_grid[1], color_grid[2])' + '\n')
-        out_mesh.write('' + '\n')
-
-
-
-
-        out_mesh.write('triangles = vtk.vtkCellArray()' + '\n')
-
-        out_mesh.write('quads_grid = vtk.vtkCellArray()' + '\n')
-
-        out_mesh.write('' + '\n')
-        out_mesh.write('for tri in triangles_list:' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('    triangle = vtk.vtkTriangle()' + '\n')
-        out_mesh.write('    triangle.GetPointIds().SetId(0, tri[0])' + '\n')
-        out_mesh.write('    triangle.GetPointIds().SetId(1, tri[1])' + '\n')
-        out_mesh.write('    triangle.GetPointIds().SetId(2, tri[2])' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('    triangles.InsertNextCell(triangle)' + '\n')
-        out_mesh.write('' + '\n')
-
-
-        out_mesh.write('for quad_grid in quads_grid_list:' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('    quad = vtk.vtkQuad()' + '\n')
-        out_mesh.write('    quad.GetPointIds().SetId(0, quad_grid[0])' + '\n')
-        out_mesh.write('    quad.GetPointIds().SetId(1, quad_grid[1])' + '\n')
-        out_mesh.write('    quad.GetPointIds().SetId(2, quad_grid[2])' + '\n')
-        out_mesh.write('    quad.GetPointIds().SetId(3, quad_grid[3])' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('    quads_grid.InsertNextCell(quad)' + '\n')
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('# polydata object' + '\n')
-        out_mesh.write('trianglePolyData = vtk.vtkPolyData()' + '\n')
-        out_mesh.write('trianglePolyData.SetPoints(points)' + '\n')
-        out_mesh.write('trianglePolyData.SetPolys(triangles)' + '\n')
-        out_mesh.write('trianglePolyData.GetPointData().SetScalars(colors)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('' + '\n')
-
-
-        out_mesh.write('# polydata object' + '\n')
-        out_mesh.write('quad_gridPolyData = vtk.vtkPolyData()' + '\n')
-        out_mesh.write('quad_gridPolyData.SetPoints(points_grid)' + '\n')
-        out_mesh.write('quad_gridPolyData.SetPolys(quads_grid)' + '\n')
-        out_mesh.write('quad_gridPolyData.GetPointData().SetScalars(colors_grid)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('' + '\n')
-        out_mesh.write('# Append the two meshes' + '\n')
-        out_mesh.write('appendFilter = vtk.vtkAppendPolyData()' + '\n')
-        out_mesh.write('if vtk.VTK_MAJOR_VERSION <= 5:' + '\n')
-        out_mesh.write('    appendFilter.AddInputConnection(trianglePolyData.GetProducerPort())' + '\n')
-        out_mesh.write('    appendFilter.AddInputConnection(quad_gridPolyData.GetProducerPort())' + '\n')
-        out_mesh.write('else:' + '\n')
-        out_mesh.write('    appendFilter.AddInputData(trianglePolyData)' + '\n')
-        out_mesh.write('    appendFilter.AddInputData(quad_gridPolyData)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('appendFilter.Update()' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('#  Remove any duplicate points.' + '\n')
-        out_mesh.write('cleanFilter = vtk.vtkCleanPolyData()' + '\n')
-        out_mesh.write('cleanFilter.SetInputConnection(appendFilter.GetOutputPort())' + '\n')
-        out_mesh.write('cleanFilter.Update()' + '\n')
-
-        out_mesh.write('' + '\n')
-        out_mesh.write('' + '\n')
-
-
-        #out_mesh.write('if vtk.VTK_MAJOR_VERSION <= 5:' + '\n')
-        #out_mesh.write('    mapper.SetInput(trianglePolyData)' + '\n')
-        #out_mesh.write('else:' + '\n')
-        #out_mesh.write('    mapper.SetInputData(trianglePolyData)' + '\n')
-        #out_mesh.write('' + '\n')
-        #out_mesh.write('ren = vtk.vtkRenderer()' + '\n')
-
-        out_mesh.write('mapper = vtk.vtkPolyDataMapper()' + '\n')
-        out_mesh.write('if vtk.VTK_MAJOR_VERSION <= 5:' + '\n')
-        out_mesh.write('    mapper.SetInput(cleanFilter.GetOutput())' + '\n')
-        out_mesh.write('else:' + '\n')
-        out_mesh.write('    mapper.SetInputData(cleanFilter.GetOutput())' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('ren = vtk.vtkRenderer()' + '\n')
-        out_mesh.write('ren.SetBackground(255, 255, 255)' + '\n')
-        out_mesh.write('renWin = vtk.vtkRenderWindow()' + '\n')
-        out_mesh.write('renWin.AddRenderer(ren)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('iren = vtk.vtkRenderWindowInteractor()' + '\n')
-        out_mesh.write('iren.SetRenderWindow(renWin)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('actor = vtk.vtkActor()' + '\n')
-        out_mesh.write('actor.SetMapper(mapper)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('# assign actor to the renderer' + '\n')
-        out_mesh.write('ren.AddActor(actor)' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('iren.Initialize()' + '\n')
-        out_mesh.write('#renWin.OffScreenRenderingOn()' + '\n')
-        out_mesh.write('renWin.Render()' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('#exp = vtk.vtkGL2PSExporter()' + '\n')
-        out_mesh.write('#exp.SetRenderWindow(renWin)' + '\n')
-        out_mesh.write("#exp.SetFilePrefix('test')" + '\n')
-        out_mesh.write('#exp.SetFileFormat(2)' + '\n')
-        out_mesh.write('#exp.SetCompress(False)' + '\n')
-        out_mesh.write('#exp.SetLandscape(False)' + '\n')
-        out_mesh.write('#exp.SetSortToBSP()' + '\n')
-        out_mesh.write('##exp.SetSortToSimple()  # less expensive sort algorithm' + '\n')
-        out_mesh.write('#exp.DrawBackgroundOn()' + '\n')
-        out_mesh.write('#exp.SetWrite3DPropsAsRasterImage(False)' + '\n')
-        out_mesh.write('#exp.Write()' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('iren.Start()' + '\n')
-
-        ## vector_file_formats = {'.ps': 0, '.eps': 1, '.pdf': 2, '.tex': 3}
-
-
-
-    def write_python_matplotlib_mplotd3d(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
-
-        comment_mplot3d = True
-        comment_mayavi2 = False
-
-
-        logger.info('writing maplotlib python file')
-
-        coords_array_lut_x, coords_array_lut_y, coords_array_lut_z = coords_arrays_lut
-
-        logger.debug("{} {}".format(min(coords_array_lut_x), max(coords_array_lut_x)))
-        logger.debug("{} {}".format(min(coords_array_lut_y), max(coords_array_lut_y)))
-        logger.debug("{} {}".format(min(coords_array_lut_z), max(coords_array_lut_z)))
-
-        coords_array_lut_x_dist = max(coords_array_lut_x) - min(coords_array_lut_x)
-        coords_array_lut_y_dist = max(coords_array_lut_y) - min(coords_array_lut_y)
-        coords_array_lut_z_dist = max(coords_array_lut_z) - min(coords_array_lut_z)
-
-        coords_array_lut_dist_max = max(coords_array_lut_x_dist, coords_array_lut_y_dist)
-
-        coords_array_lut_x_dist_margin = (coords_array_lut_dist_max - coords_array_lut_x_dist) / 2.0
-        coords_array_lut_y_dist_margin = (coords_array_lut_dist_max - coords_array_lut_y_dist) / 2.0
-        coords_array_lut_z_dist_margin = (coords_array_lut_z_dist - coords_array_lut_z_dist) / 2.0
-
-
-        colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha = colors_arrays_lut
-
-
-
-        triangles_x_min_total, triangles_x_max_total, triangles_y_min_total, triangles_y_max_total, triangles_z_min_total, triangles_z_max_total = aoi3d
-
-        out_mesh.write('import numpy as np' + '\n')
-
-        out_mesh.write('' + '\n')
-
-        out_mesh.write('x = np.array( ' + str(coords_array_lut_x) + ') \n')
-        out_mesh.write('y = np.array( ' + str(coords_array_lut_y) + ') \n')
-        out_mesh.write('z = np.array( ' + str(coords_array_lut_z) + ') \n')
-
-        nodecoords_list = nodecoords_array.tolist()
-        nodecoords_list_int = map(int, nodecoords_list)
-
-        out_mesh.write('' + '\n')
-
-
-
-        nodecoords_list_int_triples = []
-        cmap_list = []
-        colors_rgba = []
-        nodecoord_triple = []
-        nodecoord_triple_id = 0
-        colors_rgba_mayavi2 = []
-        scalars = []
-
-        nodecoord_triple_cnt=0
-        colors_rgba_cnt=0
-        cmap_list_cnt=0
-
-
-        ## Iterate through triangles
-
-        for nodecoord_id in range(0, len(nodecoords_list_int), 3):
-
-            nodecoord_triple = [nodecoords_list_int[nodecoord_id], nodecoords_list_int[nodecoord_id+1], nodecoords_list_int[nodecoord_id+2]]
-
-            if (nodecoord_triple[0] == nodecoord_triple[1]) or (nodecoord_triple[0] == nodecoord_triple[2]) or (nodecoord_triple[0] == nodecoord_triple[2]):
-                logger.debug("warning {} {} {}".format(nodecoord_triple[0], nodecoord_triple[1], nodecoord_triple[2]))
-
-            col_id = float(nodecoord_triple_cnt) / (len(nodecoords_array)/3)
-
-
-            nodecoords_list_int_triples.append(nodecoord_triple)
-            nodecoord_triple_cnt +=1
-
-
-            nodecoord_triple=[]
-            nodecoord_triple_id+=1
-
-
-            ## face coloring in mplot3d does not seem to work (at least not for larger datasets)
-            #col_id = float(nodecoord_id) / (len(nodecoords_list_int)/3)
-            #cmap_list.append(round(col_id,8))
-            #colors_rgba.append((round(col_id,8), (round(triangle_red,2), round(triangle_green,2), round(triangle_blue,2), round(triangle_alpha,2))))
-
-
-        ## Iterate through vertices
-
-        for color_lut_id, (color_lut_red, color_lut_green, color_lut_blue, color_lut_alpha) in enumerate(zip(colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha)):
-            colors_rgba_mayavi2.append([int(color_lut_red * 100 * 2.55), int(color_lut_green * 100 * 2.55), int(color_lut_blue * 100 * 2.55), 255])
-            scalars.append(color_lut_id)
-
-
-
-        out_mesh.write('triangles = ' + str(nodecoords_list_int_triples) + '\n')
-        out_mesh.write('scalars = ' + str(scalars) + '\n')
-        out_mesh.write('colors = ' + str(colors_rgba_mayavi2) + '\n')
-
-
-
-        out_mesh.write('' + '\n')
-
-        if comment_mplot3d == True:
-            mplot3d_comment_char = "#"
-        else:
-            mplot3d_comment_char = ""
-
-        if comment_mayavi2 == True:
-            mayavi2_comment_char = "#"
-        else:
-            mayavi2_comment_char = ""
-
-
-        out_mesh.write(mplot3d_comment_char + 'from mpl_toolkits.mplot3d import Axes3D' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'import matplotlib.pyplot as plt' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'from mpl_toolkits.mplot3d.art3d import Poly3DCollection' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'from matplotlib.colors import LinearSegmentedColormap' + '\n')
-
-        out_mesh.write(mplot3d_comment_char + 'fig = plt.figure(figsize=(10,  10), dpi=72.0)' + '\n')
-        out_mesh.write(mplot3d_comment_char + "ax = fig.gca(projection='3d')" + '\n')
-        out_mesh.write(mplot3d_comment_char + 'ax.set_xlim([' + str(min(coords_array_lut_x) - coords_array_lut_x_dist_margin) + ',' + str(max(coords_array_lut_x) + coords_array_lut_x_dist_margin) + '])' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'ax.set_ylim([' + str(min(coords_array_lut_y) - coords_array_lut_y_dist_margin) + ',' + str(max(coords_array_lut_y) + coords_array_lut_y_dist_margin) + '])' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'ax.set_zlim([' + str(min(coords_array_lut_z) - coords_array_lut_z_dist_margin) + ',' + str(max(coords_array_lut_z) + coords_array_lut_z_dist_margin) + '])' + '\n')
-        out_mesh.write(mplot3d_comment_char + "ax.set_aspect('equal')" + '\n')
-        out_mesh.write(mplot3d_comment_char + 'collec = ax.plot_trisurf(x, y, z, triangles=triangles, cmap=None, linewidth=0.0, antialiased=True, shade=True)' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'collec.set_array(None)' + '\n')
-        out_mesh.write(mplot3d_comment_char + 'plt.show()' + '\n')
-        out_mesh.write('\n')
-
-        x_grid_min = min(coords_array_lut_x) - coords_array_lut_x_dist_margin
-        y_grid_min = min(coords_array_lut_y) - coords_array_lut_y_dist_margin
-        z_grid_min = min(coords_array_lut_z) - coords_array_lut_z_dist_margin
-        x_grid_max = max(coords_array_lut_x) + coords_array_lut_x_dist_margin
-        y_grid_max = max(coords_array_lut_y) + coords_array_lut_y_dist_margin
-        z_grid_max = max(coords_array_lut_z) + coords_array_lut_z_dist_margin
-
-        out_mesh.write('x_grid = np.array([ ' + str(x_grid_min) + ',' + str(x_grid_max) + ',' + str(x_grid_max) + ',' + str(x_grid_min) + ']) \n')
-        out_mesh.write('y_grid = np.array([ ' + str(y_grid_min) + ',' + str(y_grid_min) + ',' + str(y_grid_max) + ',' + str(y_grid_max) + ']) \n')
-        out_mesh.write('z_grid = np.array([ ' + str(z_grid_min) + ',' + str(z_grid_min) + ',' + str(z_grid_min) + ',' + str(z_grid_min) + ']) \n')
-
-        triangle_grid1 = [0,1,2]
-        triangle_grid2 = [0,2,3]
-
-        color_grid = [127,127,127,125]
-
-        out_mesh.write('triangles_grid = [' + str(triangle_grid1) + ',' + str(triangle_grid2) + ']' + '\n')
-        out_mesh.write('colors_grid = [' + str(color_grid) + ',' + str(color_grid) + ',' + str(color_grid) + ',' + str(color_grid) + ']' + '\n')
-        out_mesh.write('scalars_grid = [0,1,2,3]' + '\n')
-
-        out_mesh.write('\n')
-        out_mesh.write(mayavi2_comment_char + 'from mayavi import mlab' + '\n')
-        ##representation='wireframe'
-        out_mesh.write(mayavi2_comment_char + 'f = mlab.figure(figure=None, bgcolor=(1.0,1.0,1.0), fgcolor=None, engine=None, size=(400, 350))' + '\n')
-        out_mesh.write(mayavi2_comment_char + 's = mlab.triangular_mesh(x, y, z, triangles, scalars=scalars)' + '\n')
-        out_mesh.write(mayavi2_comment_char + 's.module_manager.scalar_lut_manager.lut.table = colors' + '\n')
-        out_mesh.write(mayavi2_comment_char + 's_grid = mlab.triangular_mesh(x_grid, y_grid, z_grid, triangles_grid, scalars=scalars_grid)' + '\n')
-        out_mesh.write(mayavi2_comment_char + 's_grid.module_manager.scalar_lut_manager.lut.table = colors_grid' + '\n')
-        out_mesh.write(mayavi2_comment_char + 't = mlab.text3d(' + str(x_grid_min) + ',' + str(y_grid_min) + ',' + str(z_grid_min) + ',' + "'labeltext'" + ',' + 'scale=1000' + ',' + 'color=(0.0,0.0,0.0)' + ')' + '\n')
-        out_mesh.write(mayavi2_comment_char + 'mlab.show()' + '\n')
-
-
-
-
-        """
-        from mayavi import mlab
-        f = mlab.figure(figure=None, bgcolor=(1.0,1.0,1.0), fgcolor=None, engine=None, size=(400, 350))
-        s = mlab.triangular_mesh(x, y, z, triangles, scalars=scalars)
-        s.module_manager.scalar_lut_manager.lut.table = colors
-
-        mlab.savefig(filename = 'map3d.pdf')
-        #mlab.show()
-
-
-        import matplotlib.pyplot as plt
-        plt.plot([1,2,3,4])
-        plt.ylabel('some numbers')
-        #plt.show()
-        plt.savefig('foo.pdf')
-
-        #import pyx
-        #c = pyx.canvas.canvas()
-        #c.insert(pyx.epsfile.epsfile(0, 0, "foo.eps", align="tl"))
-        #c.insert(pyx.epsfile.epsfile(0,0,"map3d.eps.gz", align="tr"))
-        #c.writePDFfile("combined.pdf")
-
-
-        from PyPDF2 import PdfFileWriter, PdfFileReader
-
-        template = PdfFileReader(open('foo.pdf', 'rb'))
-        wpdf = PdfFileReader(open('map3d.pdf', 'rb'))
-        watermark = wpdf.getPage(0)
-        output = PdfFileWriter()
-
-        page = template.getPage(0)
-        page.mergePage(watermark)
-        output.addPage(page)
-
-        with open('combined.pdf', 'wb') as f:
-            output.write(f)
-        """
-
-
-
-
-
-        logger.debug("nodecoord_triple_cnt {}".format(nodecoord_triple_cnt))
-        logger.debug("colors_rgba_cnt {}".format(colors_rgba_cnt))
-        logger.debug("cmap_list_cnt {}".format(cmap_list_cnt))
-        logger.debug("colors_array_lut_red {}".format(len(colors_array_lut_red)))
-        logger.debug("coords_array_lut_x {}".format(len(coords_array_lut_x)))
-
-
-
-
-    def write_osgt(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
-
-        coords_array_lut_x, coords_array_lut_y, coords_array_lut_z = coords_arrays_lut
-        colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha = colors_arrays_lut
-        normals_array_lut_x, normals_array_lut_y, normals_array_lut_z = normals_arrays_lut
-
-        logger.debug('normals_array_lut_x {}'.format(len(normals_array_lut_x)))
-
-        nodecoords_list = nodecoords_array.tolist()
-        nodecoords_list_int = map(int, nodecoords_list)
-        nodecoords_list_int_triples = []
-
-
-        for nodecoord_id in range(0, len(nodecoords_list_int), 3):
-
-            nodecoord_triple = [nodecoords_list_int[nodecoord_id], nodecoords_list_int[nodecoord_id+1], nodecoords_list_int[nodecoord_id+2]]
-            nodecoords_list_int_triples.append(nodecoord_triple)
-
-
-
-
-        logger.info('writing osgt')
-
-
-
-        out_mesh.write('#Ascii Scene' + '\n')
-        out_mesh.write('#Version 92' + '\n')
-        out_mesh.write('#Generator osgexport 0.15.0' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('osg::Geode {' + '\n')
-        out_mesh.write('  UniqueID 1' + '\n')
-        out_mesh.write('  Name "glider_ed.osg"' + '\n')
-        out_mesh.write('  DataVariance DYNAMIC' + '\n')
-        out_mesh.write('  Drawables 1 {' + '\n')
-        out_mesh.write('    osg::Geometry {' + '\n')
-        out_mesh.write('      UniqueID 2' + '\n')
-        out_mesh.write('      DataVariance DYNAMIC' + '\n')
-        out_mesh.write('      UseDisplayList FALSE' + '\n')
-        out_mesh.write('              PrimitiveSetList 1 {' + '\n')
-        out_mesh.write('                  DrawElementsUShort GL_TRIANGLES ' + str(len(nodecoords_list_int_triples)*3) + ' {' + '\n')
-
-        for nodecoords_triple in nodecoords_list_int_triples:
-            out_mesh.write('                    ' + str(nodecoords_triple[0]) + ' ' + str(nodecoords_triple[1]) + ' ' + str(nodecoords_triple[2]) + '\n')
-
-        out_mesh.write('                  }' + '\n')
-        out_mesh.write('              }' + '\n')
-        out_mesh.write('              VertexData {' + '\n')
-        out_mesh.write('                Array TRUE ArrayID 0 Vec3fArray ' + str(len(coords_array_lut_x)) + ' {' + '\n')
-
-        for coord_id, (coord_x, coord_y, coord_z) in enumerate(zip(coords_array_lut_x, coords_array_lut_y, coords_array_lut_z)):
-            out_mesh.write('                  ' + str(coord_x) + ' ' + str(coord_y) + ' ' + str(coord_z) + '\n')
-
-        out_mesh.write('                }' + '\n')
-        out_mesh.write('                Indices FALSE' + '\n')
-        out_mesh.write('                Binding BIND_PER_VERTEX' + '\n')
-        out_mesh.write('                Normalize 0' + '\n')
-        out_mesh.write('              }' + '\n')
-        out_mesh.write('              NormalData {' + '\n')
-        out_mesh.write('                Array TRUE ArrayID 1 Vec3fArray ' + str(len(normals_array_lut_x)) + ' {' + '\n')
-
-        for normal_id, (normal_x, normal_y, normal_z) in enumerate(zip(normals_array_lut_x, normals_array_lut_y, normals_array_lut_z)):
-            out_mesh.write('                  ' + str(normal_x) + ' ' + str(normal_y) + ' ' + str(normal_z) + '\n')
-
-        out_mesh.write('                }' + '\n')
-        out_mesh.write('                Indices FALSE' + '\n')
-        out_mesh.write('                Binding BIND_PER_VERTEX' + '\n')
-        out_mesh.write('                Normalize 0' + '\n')
-        out_mesh.write('              }' + '\n')
-        out_mesh.write('              ColorData {' + '\n')
-        out_mesh.write('                Array TRUE ArrayID 2 Vec4fArray ' + str(len(colors_array_lut_red)) + ' {' + '\n')
-
-        for color_id, (color_red, color_green, color_blue, color_alpha) in enumerate(zip(colors_array_lut_red, colors_array_lut_green, colors_array_lut_blue, colors_array_lut_alpha)):
-            out_mesh.write('                  ' + str(color_red) + ' ' + str(color_green) + ' ' + str(color_blue) + ' ' + str(color_alpha) + '\n')
-
-        out_mesh.write('                }' + '\n')
-        out_mesh.write('                Indices FALSE' + '\n')
-        out_mesh.write('                Binding BIND_PER_VERTEX' + '\n')
-        out_mesh.write('                Normalize 0' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('                Array TRUE ArrayID 3 Vec1fArray 3 {' + '\n')
-        out_mesh.write('                  0' + '\n')
-        out_mesh.write('                  0' + '\n')
-        out_mesh.write('                  0' + '\n')
-        out_mesh.write('                }' + '\n')
-        out_mesh.write('                Indices FALSE' + '\n')
-        out_mesh.write('                Binding BIND_PER_VERTEX' + '\n')
-        out_mesh.write('                Normalize 0' + '\n')
-        out_mesh.write('              }' + '\n')
-        out_mesh.write('' + '\n')
-        out_mesh.write('    }' + '\n')
-        out_mesh.write('  }' + '\n')
-        out_mesh.write('}' + '\n')
-
-
-
-    def write_threejs(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
-        pass
-
-    def write_pov(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
-        pass
-
 
     def write_x3d(self, nodecoords_array, coords_arrays_lut, nodecolors_array, colors_arrays_lut, normals_arrays_lut, out_mesh, out_mesh_filename, aoi3d, center_scale_coords, indexed_colors, scale_xy, z_exaggeration, projection, centering, in_boundaries_extent, in_boundaries_spatialref, in_dem_stats_minmax, out_triangles_minmax_boundaries_total):
 
