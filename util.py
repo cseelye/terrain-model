@@ -135,14 +135,18 @@ class ProgressTracker(object):
     def est_time_remaining(self):
         return int(self.time_per_unit * (self.total - self.count))
 
+    def time_since_start(self):
+        return time() - self.start_time
+
     def display(self):
         now = time()
         current = self.percent_complete()
         time_left = self.est_time_remaining()
+        elapsed_time = self.time_since_start()
         if current == self.last_display_pct:
             return
         if current >= 100 and self.last_display_pct <= 100:
-            self.logger.info("   {}%".format(current))
+            self.logger.info("   {}% ({} sec elapsed)".format(current, int(elapsed_time)))
         elif current >= self.last_display_pct + self.display_pct_interval or \
              now - self.last_display_time > self.display_time_interval:
             self.logger.info("    {}% - {} sec remaining".format(current, time_left))
