@@ -1,6 +1,6 @@
 """Helpers for processing GIS data into 3D models"""
 from __future__ import print_function
-from gtm.geotrimesh import mesh
+from gtm1.geotrimesh import mesh
 from pyapputil.logutil import GetLogger
 from pyapputil.exceptutil import ApplicationError
 from util import download_file
