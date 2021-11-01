@@ -8,6 +8,7 @@ from util import download_file
 from affine import Affine
 from lxml import etree as ET
 import math
+import numpy
 import os
 from osgeo import gdal, osr
 from pathlib import Path
@@ -88,6 +89,8 @@ gdal.ConfigurePythonLogging(logger_name=MYLOG.name)
 # Notes on Axis order
 # Latitude:   -90s to 90n degrees, north positive, south negative, Y axis
 # Longtitude: -180w to 180e degrees, east positive, west negative, X axis
+# UL = N,W or max_lat, min_long
+# LR = S,E or min_lat, max_long
 # https://github.com/OSGeo/gdal/blob/master/MIGRATION_GUIDE.TXT - see "MIGRATION GUIDE FROM GDAL 2.4 to GDAL 3.0"
 # https://gis.stackexchange.com/a/364947
 # https://gis.stackexchange.com/a/99862
@@ -228,7 +231,7 @@ def degree_lat_to_miles(lat):
     rads = lat * 2 * math.pi / 360
     return (WGS84.m1 + WGS84.m2 * math.cos(2*rads) + WGS84.m3 * math.cos(4*rads) + WGS84.m4 * math.cos(6*rads)) * 0.000621371
 
-def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, max_lat, max_long, output_type="GTiff", remove_alpha=True):
+def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, max_lat, max_long, output_type="GTiff", remove_alpha=False):
     """
     Convert a georeferenced raster file to another format and crop it to the given GPS coordinates
 
@@ -244,15 +247,24 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
     """
     log = GetLogger()
 
+    center_lat =  (max_lat + min_lat)/2
+    real_width = (max_long - min_long) * degree_long_to_miles(center_lat)
+    real_height = (max_lat - min_lat) * degree_lat_to_miles(center_lat)
+    log.debug("Cropping to {}mi wide by {}mi high".format(real_width, real_height))
+
     # Using shell commands for this because the native python interface isn't working after recent GDAL upgrade plus testing agaisnt more types of input files
     # Use shell commands until I have time to debug/fix the native code
     from pyapputil.shellutil import Shell
     log.info("Cropping to boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(max_lat, min_long, min_lat, max_long))
     log.info("Converting to {}".format(output_type))
     band_args = "-b 1 -b 2 -b 3" if remove_alpha else ""
-    retcode, _, stderr = Shell("gdal_translate -of {output_type} {band_args} -projwin_srs EPSG:4326 -projwin -116.0765 38.39 -116.061 38.378 {infile} {outfile}".format(
+    retcode, _, stderr = Shell("gdal_translate -of {output_type} {band_args} -projwin_srs EPSG:4326 -projwin {min_long} {max_lat} {max_long} {min_lat} {infile} {outfile}".format(
         output_type=output_type,
         band_args=band_args,
+        max_lat=max_lat,
+        min_lat=min_lat,
+        max_long=max_long,
+        min_long=min_long,
         infile=input_filename,
         outfile=output_filename
     ))
@@ -313,6 +325,11 @@ def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
                             mesh_prefix=outprefix,
                             z_exaggeration=z_exaggeration)
 
+def dem_to_model2(dem_filename, model_filename, z_exaggeration=1.0):
+    """
+    """
+    
+
 def get_raster_boundaries_geo(data_source):
     """
     Get the min and max image georeferenced coordinates of the area of the image
@@ -348,8 +365,8 @@ def get_raster_boundaries_gps(data_source):
     target_srs = osr.SpatialReference()
     target_srs.ImportFromEPSG(4326) # WGS84
     trans = osr.CoordinateTransformation(source_srs, target_srs)
-    max_lat, min_long, _ = trans.TransformPoint(source_extent[0], source_extent[3], 0.0)
-    min_lat, max_long, _ = trans.TransformPoint(source_extent[2], source_extent[1], 0.0)
+    min_long, max_lat, _ = trans.TransformPoint(source_extent[0], source_extent[3], 0.0)
+    max_long, min_lat, _ = trans.TransformPoint(source_extent[2], source_extent[1], 0.0)
     return (min_lat, min_long, max_lat, max_long)
 
 def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long):
@@ -428,4 +445,4 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long):
 
     log.info("Converting and cropping elevation data")
     input_data = workdir / elevation_data["data_path"]
-    convert_and_crop_raster(input_data, dem_filename, min_lat, min_long, max_lat, max_long)
+    convert_and_crop_raster(input_data, dem_filename, min_lat, min_long, max_lat, max_long, remove_alpha=False)
