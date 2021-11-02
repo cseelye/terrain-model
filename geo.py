@@ -3,16 +3,20 @@ from __future__ import print_function
 from gtm1.geotrimesh import mesh
 from pyapputil.logutil import GetLogger
 from pyapputil.exceptutil import ApplicationError
+from pyapputil.shellutil import Shell
 from util import download_file
 
 from affine import Affine
+import bisect
+from dateutil.parser import isoparse
 from lxml import etree as ET
 import math
-import numpy
 import os
 from osgeo import gdal, osr
 from pathlib import Path
+import requests
 from requests import HTTPError
+import shutil
 import tempfile
 try:
     from urllib.parse import urlparse
@@ -328,7 +332,7 @@ def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
 def dem_to_model2(dem_filename, model_filename, z_exaggeration=1.0):
     """
     """
-    
+
 
 def get_raster_boundaries_geo(data_source):
     """
@@ -369,80 +373,311 @@ def get_raster_boundaries_gps(data_source):
     max_long, min_lat, _ = trans.TransformPoint(source_extent[2], source_extent[1], 0.0)
     return (min_lat, min_long, max_lat, max_long)
 
-def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long):
+def get_elevation_tilename(latitude, longitude):
+    """
+    Get the filename for a tile covering the given coordinates.
+    """
+    upper = int(math.ceil(latitude))
+    left = int(math.floor(longitude))
+    return "dem-{}.tif".format(get_coords_string(upper, left))
+
+def get_image_tile_name(latitude, longitude):
+    """
+    Get the filename for an image tile covering the given coordinates.
+    """
+    return "image-{}.tif".format(get_coords_string(latitude, longitude))
+
+def get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long):
+    return "cropped-dem-{coords_ul}_{coords_lr}.tif".format(
+                    coords_ul=get_coords_string(max_lat, min_long),
+                    coords_lr=get_coords_string(min_lat, max_long))
+
+def get_cropped_image_filename(max_lat, min_long, min_lat, max_long):
+    return "cropped-image-{coords_ul}_{coords_lr}.tif".format(
+                    coords_ul=get_coords_string(max_lat, min_long),
+                    coords_lr=get_coords_string(min_lat, max_long))
+
+def get_coords_string(latitude, longitude):
+    return "{}{}{}{}".format("n" if latitude > 0 else "s",
+                                 abs(latitude),
+                                 "e" if longitude > 0 else "w",
+                                 abs(longitude))
+
+def download_elevation_tile(latitude, longitude, dest_dir):
+    """
+    Download elevation data for a given lat/long region. This will download the
+    1x1 degree tile covering the requested area, rename it to a standard
+    filename, convert it to a GeoTiff, and store it in the destination dir. If
+    the file already exists in the destination no action will be taken.
+
+    Args:
+        latitude:   latitude of a point in the region
+        longitude:  longitude of a point in the region
+        dest_dir:   the directory to download the tile to
+
+    Returns:
+        The full path of the elevation file (Path)
+    """
+    log = GetLogger()
+
+    upper = int(math.ceil(latitude))
+    left = int(math.floor(longitude))
+
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check the local cache to see if we already have this tile
+    output_file = dest_dir / Path(get_elevation_tilename(latitude, longitude))
+    log.debug("Checking cache for {}".format(output_file))
+    if output_file.exists():
+        log.info("Using cached elevation data for ({},{})".format(upper, left))
+        return output_file
+
+    # Query the National Map API for elevation products
+    log.info("Downloading elevation data for ({},{})".format(upper, left))
+    query_url = "https://tnmaccess.nationalmap.gov/api/v1/products"
+    payload = {
+        "bbox": "{},{},{},{}".format(left, upper, left, upper),
+        "datasets": "National Elevation Dataset (NED) 1/3 arc-second",
+        "max": 10
+    }
+    with requests.get(query_url, params=payload) as req:
+        log.debug(req.url)
+        req.raise_for_status()
+        resp = req.json()
+    # Filter to only matching lat/long
+    items = [x for x in resp["items"] if round(x["boundingBox"]["minX"], 1) == left and round(x["boundingBox"]["maxY"], 1) == upper]
+    # Sort by date to get the newest
+    items.sort(key=lambda x: isoparse(x["dateCreated"]))
+    if len(items) <= 0:
+        raise ApplicationError("Could not find an elevation product for the requested area from the National Map")
+    url = items[0]["downloadURL"]
+
+    # Download the file we got from the API
+    with tempfile.TemporaryDirectory() as download_dir:
+        pieces = urlparse(url)
+        base_filename = Path(pieces.path).name
+        local_filename = Path(download_dir) / base_filename
+        download_file(url, local_filename)
+
+        # Extract if necessary
+        if local_filename.suffix == ".zip":
+            log.info("Extracting elevation data file")
+            log.debug("Extracting {} to {}".format(local_filename, download_dir))
+            archive = zipfile.ZipFile(local_filename)
+            archive.extractall(path=download_dir)
+            # Find the data file in the zip
+            coords = "{}{}{}{}".format("n" if upper > 0 else "s",
+                                    abs(upper),
+                                    "e" if left > 0 else "w",
+                                    abs(left))
+            known_filenames = ["grd{}_13".format(coords), "USGS_NED_13_{}_IMG.img".format(coords), "img{}_13.img".format(coords)]
+            for fname in known_filenames:
+                if (download_dir / fname).exists():
+                    data_filename = download_dir / fname
+                    break
+        else:
+            data_filename = local_filename
+
+        # Convert to GeoTIFF
+        retcode, _, stderr = Shell("gdal_translate -of {output_type} {infile} {outfile}".format(
+            output_type="GTiff",
+            infile=data_filename,
+            outfile=output_file
+        ))
+        if retcode != 0 or "ERROR" in stderr:
+            raise ApplicationError("Could not convert tile: {}".format(stderr))
+
+        return output_file
+
+def download_image_tile(latitude, longitude, dest_dir):
+    """
+    Download image file for a given lat/long region. This will download the
+    3.75' x 3.75' tile covering the requested area, rename it to a standard
+    filename, and store it in the destination dir. If the file already
+    exists in the destination no action will be taken.
+
+    Args:
+        latitude:   latitude of the upper left corner of the region
+        longitude:  longitude of the upper left corner of the region
+        dest_dir:   the directory to download the tile to
+
+    Returns:
+        The full path of the image file (Path)
+    """
+    log = GetLogger()
+
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check the local cache to see if we already have this tile
+    output_file = dest_dir / Path(get_image_tile_name(latitude, longitude))
+    log.debug("Checking cache for {}".format(output_file))
+    if output_file.exists():
+        log.info("Using cached elevation data for ({},{})".format(latitude, longitude))
+        return output_file
+
+    # Query the National Map API for image products
+    log.info("Downloading image data for ({},{})".format(latitude, longitude))
+    query_url = "https://tnmaccess.nationalmap.gov/api/v1/products"
+    payload = {
+        "bbox": "{},{},{},{}".format(longitude, latitude, longitude, latitude),
+        "datasets": "USDA National Agriculture Imagery Program (NAIP)",
+        "max": 100
+    }
+    with requests.get(query_url, params=payload) as req:
+        log.debug(req.url)
+        req.raise_for_status()
+        resp = req.json()
+    # Filter to only exact matching lat/long
+    items = [x for x in resp["items"] if round(x["boundingBox"]["minX"], 4) == longitude and round(x["boundingBox"]["maxY"], 4) == latitude]
+    # Sort by date to get the newest
+    items.sort(key=lambda x: isoparse(x["dateCreated"]))
+    if len(items) <= 0:
+        raise ApplicationError("Could not find an image product for the requested area from the National Map")
+
+    # Download the file we got from the API
+    url = items[0]["downloadURL"]
+    with tempfile.TemporaryDirectory() as download_dir:
+        pieces = urlparse(url)
+        base_filename = Path(pieces.path).name
+        local_filename = Path(download_dir) / base_filename
+        download_file(url, local_filename)
+
+        # Move the downloaded file to the final location
+        shutil.move(local_filename, output_file)
+
+        return output_file
+
+def get_image_tile_interval():
+    # USGS distributes elevation data in 3.75' tiles, 3.75' = 0.0625 degree
+    return 0.0625
+
+def get_elevation_tile_interval():
+    # USGS distributes elevation data in 1 degree tiles
+    return 1
+
+def get_image_tile_coords(latitude, longitude):
+    """
+    Get the coordinates of the upper left corner of the image tile containing a point
+    """
+    return get_tile_coords_range(latitude, latitude, longitude, longitude, get_image_tile_interval())[0]
+
+def get_image_tile_range(min_lat, min_long, max_lat, max_long):
+    return get_tile_coords_range(min_lat, min_long, max_lat, max_long, get_image_tile_interval())
+
+def get_elevation_tile_coords(latitude, longitude):
+    """
+    Get the coordinates of the upper left corner of the elevation tile containing a point
+    """
+    return get_tile_coords_range(latitude, latitude, longitude, longitude, get_elevation_tile_interval())[0]
+
+def get_elevation_tile_range(min_lat, min_long, max_lat, max_long):
+    return get_tile_coords_range(min_lat, min_long, max_lat, max_long, get_elevation_tile_interval())
+
+def get_tile_coords_range(min_lat, min_long, max_lat, max_long, interval):
+    """
+    Get the coordinates of the upper left corner of the image tile containing a point
+    """
+    upper = int(math.ceil(abs(max_lat)))
+    if max_lat < 0:
+        upper = -upper
+    lower = int(math.ceil(abs(min_lat)))
+    if min_lat < 0:
+        lower = -lower
+    left = int(math.ceil(abs(min_long)))
+    if min_long < 0:
+        left = -left
+    right = int(math.ceil(abs(max_long)))
+    if max_long < 0:
+        right = -right
+
+    lat_intervals = [(lower - 1) + (x * interval) for x in range(0, int(((upper + 1) - (lower - 1)) / interval) + 1)]
+    long_intervals = [(left - 1) + (x * interval) for x in range(0, int(((right + 1) - (left - 1)) / interval) + 1)]
+
+    # Find the index of the tiles for latitude
+    max_lat_tile_idx = bisect.bisect_left(lat_intervals, max_lat)
+    min_lat_tile_idx = bisect.bisect_left(lat_intervals, min_lat)
+
+
+    # Find the index of the tiles for longitude
+    max_long_tile_idx = bisect.bisect_right(long_intervals, max_long) - 1
+    min_long_tile_idx = bisect.bisect_right(long_intervals, min_long) - 1
+
+    tiles = []
+    for lat in lat_intervals[min_lat_tile_idx:max_lat_tile_idx+1]:
+        for long in long_intervals[min_long_tile_idx:max_long_tile_idx+1]:
+            tiles.append((lat, long))
+    return tiles
+
+def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=Path("cache")):
     """
     Get the elevation data for the given region. This will download, crop and convert the requested elevation data
 
     Args:
-        dem_filename:   file to save the elevation data to
-        min_lat:        south border of the region
-        min_long:       east border of the region
-        max_lat:        north border of the region
-        max_long:       west border of the region
+        dem_filename:   file to save the elevation data to (Path)
+        min_lat:        south border of the region (float)
+        min_long:       east border of the region (float)
+        max_lat:        north border of the region (float)
+        max_long:       west border of the region (float)
+        cache_dir:      the path to save/look for the elevation data (Path)
     """
     log = GetLogger()
 
-    log.debug("local elevation data file = {}".format(dem_filename))
-    if dem_filename.exists():
-        log.info("Using existing elevation data file {}".format(dem_filename))
+    log.debug("Checking cache for {}".format(cache_dir / dem_filename))
+    if (cache_dir / dem_filename).exists():
+        log.info("Using cached elevation data file {}".format(dem_filename))
         return
 
-    log.info("Downloading elevation data")
-    workdir = Path(tempfile.mkdtemp())
-    log.debug("download workdir={}".format(workdir))
+    # Make a list of elevation tiles we need to cover this region and download them
+    tile_coords = get_elevation_tile_range(min_lat, min_long, max_lat, max_long)
+    elevation_files = []
+    for lat, long in tile_coords:
+        tile_file = download_elevation_tile(lat, long, cache_dir)
+        elevation_files.append(tile_file)
 
-    upper = int(math.ceil(max_lat))
-    left = int(math.floor(max_long))
+    # Create a virtual data source with all of the tiles
+    log.debug("Creating virtual data set with tiles {}".format(",".join(str(f) for f in elevation_files)))
+    _, crop_input_file = tempfile.mkstemp()
+    retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(crop_input_file, " ".join(str(f) for f in elevation_files)))
+    if retcode != 0 or "ERROR" in stderr:
+        raise ApplicationError("Could not merge input files: {}".format(stderr))
 
-    # Find an available elevation product
-    coords = "{}{}{}{}".format("n" if upper > 0 else "s",
-                               abs(upper),
-                               "e" if left > 0 else "w",
-                               abs(left))
-    coords2 = "{}{}{}{:03d}".format("n" if upper > 0 else "s",
-                               abs(upper),
-                               "e" if left > 0 else "w",
-                               abs(left))
-    possible_urls = [
-        {
-            "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/ArcGrid/{}.zip".format(coords),
-            "data_path": "grd{}_13".format(coords)
-        },
-        {
-            "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/IMG/USGS_NED_13_{}_IMG.zip".format(coords),
-            "data_path": "USGS_NED_13_{}_IMG.img".format(coords)
-        },
-        {
-            "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/IMG/{}.zip".format(coords),
-            "data_path": "img{}_13.img".format(coords)
-        },
-        {
-            "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/13/TIFF/{coords2}/USGS_13_{coords2}.tif".format(coords2=coords2),
-            "data_path": "USGS_13_{}.tif".format(coords2)
-        }
-    ]
-    found = False
-    for elevation_data in possible_urls:
-        url = elevation_data["url"]
-        pieces = urlparse(url)
-        base_filename = Path(pieces.path).name
-        local_filename = workdir / base_filename
-        try:
-            download_file(url, local_filename)
-            found = True
-            break
-        except HTTPError:
-            continue
-    if not found:
-        raise ApplicationError("Could not find an elevation product for the requested area from the National Map")
-
-    # Extract if necessary
-    if local_filename.suffix == ".zip":
-        log.info("Extracting elevation data file")
-        log.debug("Extracting {} to {}".format(local_filename, workdir))
-        archive = zipfile.ZipFile(local_filename)
-        archive.extractall(path=workdir)
-
+    # Crop to the requested region and convert to geotiff
     log.info("Converting and cropping elevation data")
-    input_data = workdir / elevation_data["data_path"]
-    convert_and_crop_raster(input_data, dem_filename, min_lat, min_long, max_lat, max_long, remove_alpha=False)
+    convert_and_crop_raster(crop_input_file, cache_dir / dem_filename, min_lat, min_long, max_lat, max_long, remove_alpha=False)
+
+def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir="cache"):
+    """
+    Get the imagery data for the given region. This will download, crop and convert the requested data
+
+    Args:
+        image_filename:     file to save the image to (Path)
+        min_lat:            south border of the region (float)
+        min_long:           east border of the region (float)
+        max_lat:            north border of the region (float)
+        max_long:           west border of the region (float)
+    """
+    log = GetLogger()
+
+    if (cache_dir / image_filename).exists():
+        log.info("Using cached image file {}".format(image_filename))
+        return
+
+    # Make a list of image tiles we need to cover this region and download them
+    tile_coords = get_image_tile_range(min_lat, min_long, max_lat, max_long)
+    image_files = []
+    for lat, long in tile_coords:
+        tile_file = download_image_tile(lat, long, cache_dir)
+        image_files.append(tile_file)
+
+    # Create a virtual data source with all of the tiles
+    log.debug("Creating virtual data set with tiles {}".format(",".join(str(f) for f in image_files)))
+    _, crop_input_file = tempfile.mkstemp()
+    retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(crop_input_file, " ".join(str(f) for f in image_files)))
+    if retcode != 0 or "ERROR" in stderr:
+        raise ApplicationError("Could not merge input files: {}".format(stderr))
+
+    # Crop to the requested region and convert to geotiff
+    log.info("Converting and cropping image data")
+    convert_and_crop_raster(crop_input_file, cache_dir / image_filename, min_lat, min_long, max_lat, max_long, remove_alpha=True)
