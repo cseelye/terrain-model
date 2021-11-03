@@ -9,3 +9,4 @@ pyshp>=1.2.12
 pngcanvas>=1.0.3
 webcolors>=1.8.1
 opencv-python-headless>=4.5.4.58
+python-dateutil==2.8.2
