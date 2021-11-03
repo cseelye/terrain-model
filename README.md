@@ -56,3 +56,10 @@ On top of the GDAL container, I build blender from source so that we can get the
 So in the container there are two python3 versions, each required for a different part of the workflow: python3.8 for the parts that use GDAL and python3.9 for the parts that use blender.
 
 ***WARNING:*** Building the container from scratch can take a long time. The blender source repos are very slow to clone for me and can take upwards of 45 min to get all of the code and libraries.
+
+## Development
+If you are hacking on the scripts, you probably want to use the dev target in the Dockerfile:
+```
+docker image build --target dev -t terrain-model-dev .
+docker container run --rm -it -v $(pwd):/work -w /work terrain-model-dev
+```
