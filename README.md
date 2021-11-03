@@ -4,7 +4,14 @@ This tool will create a 3D model in Blender given a set of GPS coordinates. This
 I built this primarily to take a GPX route from a hike or four wheeling trip and create a full color, printable 3D model.
 
 ## Workflow
-This is the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files
+This is the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files.
+
+From the repo directory, prepare and enter the container:
+```
+docker image build --target prod -t terrain-model .
+docker container run --rm -it -v $(pwd):/work -w /work terrain-model
+```
+
 1. Download orthoimages from [The National Map](https://apps.nationalmap.gov/downloader)  
     1. Select Imagery on the left side
     2. Use the map on the right side to search for the area you are trying to model.
