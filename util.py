@@ -1,45 +1,27 @@
 #pylint: disable=unidiomatic-typecheck,protected-access,global-statement
 """Helper functions for terrain-model scripts"""
 
+import collections
+from time import time
+
 from pyapputil.logutil import GetLogger
 from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
 from pyapputil.typeutil import IntegerRangeType, ItemList
-
-import collections
-import base64
 import requests
-import socket
-import ssl
-from time import time
 import webcolors
-
-# Python 2/3 compat imports
-#pylint: disable=ungrouped-imports
-#pylint: disable=redefined-builtin
-try:
-    import urlparse
-except ImportError:
-    import urllib.parse as urlparse
-
-try:
-    import httplib
-except ImportError:
-    import http.client as httplib
-
-try:
-    from urllib2 import urlopen, Request, HTTPError, URLError
-except ImportError:
-    from urllib.request import urlopen, Request
-    from urllib.error import HTTPError, URLError
-from past.builtins import basestring
-#pylint: enable=redefined-builtin
-#pylint: enable=ungrouped-imports
-
 
 class UnauthorizedError(ApplicationError):
     """Raised when a 401 or similar error is encountered"""
 
 def download_file(url, local_file):
+    """
+    Download a file from a URL. This function is made to stream large binary
+    files.
+
+    Args:
+        url:            (string) The URL to download.
+        local_file:     (Path)   The filepath to save the content to.
+    """
     log = GetLogger()
     log.debug("GET %s -> %s", url, local_file)
     with requests.get(url, stream=True) as req:
@@ -48,8 +30,7 @@ def download_file(url, local_file):
             for chunk in req.iter_content(chunk_size=16 * 1024):
                 output.write(chunk)
 
-
-class Color(object):
+class Color:
     """A named or RBG color"""
 
     def __init__(self):
@@ -62,9 +43,9 @@ class Color(object):
 
     def __repr__(self):
         if self.name:
-            return "Color({})".format(self.name)
-        elif self.rgb:
-            return "Color({})".format(self.rgb)
+            return f"Color({self.name})"
+        if self.rgb:
+            return f"Color({self.rgb})"
         return "Color"
 
     def parse(self, color):
@@ -78,8 +59,8 @@ class Color(object):
             self.rgb = color.rgb
             return self
 
-        if (isinstance(color, collections.Sequence) and not isinstance(color, basestring)) or \
-           (isinstance(color, basestring) and "," in color):
+        if (isinstance(color, collections.Sequence) and not isinstance(color, str)) or \
+           (isinstance(color, str) and "," in color):
             self.rgb = ItemList(IntegerRangeType(minValue=0, maxValue=255), minLength=3, maxLength=3)(color)
 
         else:
@@ -89,23 +70,22 @@ class Color(object):
                 self.name = color
                 self.rgb = (parsed.red, parsed.green, parsed.blue)
             except ValueError:
-                raise InvalidArgumentError("{} is not a recognizable color name".format(color))
+                raise InvalidArgumentError("{color} is not a recognizable color name") #pylint: disable=raise-missing-from
 
         if not self.name:
             try:
                 self.name = webcolors.rgb_to_name(self.rgb)
             except ValueError:
-                self.name = "Unknown"
+                self.name = None
 
-    def AsBGR(self):
+        return self
+
+    def as_bgr(self):
         """Return this color in BGR format"""
-        if not self.rgb:
-            return None
-        bgr = list(self.rgb)
-        bgr.reverse()
-        return tuple(bgr)
+        return tuple(reversed(self.rgb))
 
-class ProgressTracker(object):
+class ProgressTracker:
+    """Track and display progress of a long running operation"""
     def __init__(self, total, display_pct_interval=10, display_time_interval=180, log=None):
         self.start_time = time()
         self.count = 0
@@ -120,6 +100,7 @@ class ProgressTracker(object):
             self.logger = GetLogger()
 
     def update(self, newcount, display=True):
+        """Update the progress"""
         self.count = newcount
         if self.count > 0:
             self.time_per_unit = (time() - self.start_time) / self.count
@@ -127,18 +108,23 @@ class ProgressTracker(object):
             self.display()
 
     def percent_complete(self):
+        """Calculate and return the percent complete"""
         complete = int(self.count * 100 / self.total)
         if complete >= 100 and self.count < self.total:
             complete = 99
         return complete
 
     def est_time_remaining(self):
+        """Calculate and retrun the estimated time remaining based on the speed
+        so far"""
         return int(self.time_per_unit * (self.total - self.count))
 
     def time_since_start(self):
+        """Calculate and return the elapsed time"""
         return time() - self.start_time
 
     def display(self):
+        """Log the current progress"""
         now = time()
         current = self.percent_complete()
         time_left = self.est_time_remaining()
@@ -146,9 +132,9 @@ class ProgressTracker(object):
         if current == self.last_display_pct:
             return
         if current >= 100 and self.last_display_pct <= 100:
-            self.logger.info("   {}% ({} sec elapsed)".format(current, int(elapsed_time)))
+            self.logger.info(f"   {current}% ({int(elapsed_time)} sec elapsed)")
         elif current >= self.last_display_pct + self.display_pct_interval or \
              now - self.last_display_time > self.display_time_interval:
-            self.logger.info("    {}% - {} sec remaining".format(current, time_left))
+            self.logger.info(f"    {current}% - {time_left} sec remaining")
             self.last_display_pct = current
             self.last_display_time = now

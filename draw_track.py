@@ -1,7 +1,6 @@
 #!/usr/bin/env python3.8
 """Draw GPX tracks on top of a geospatial image"""
 
-from numpy.core import machar
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, StrType, PositiveNonZeroIntegerType, PositiveIntegerType
@@ -86,7 +85,7 @@ def main(gpx_file,
 
         # Reshape the array into what cv2.polylines wants
         pixel_points = pixel_points.reshape((-1, 1, 2))
-        
+
         cv2.polylines(img, [pixel_points], False, track_color.AsBGR(), track_width, cv2.LINE_AA)
 
     (height, width) = img.shape[:2]
@@ -102,11 +101,11 @@ def main(gpx_file,
         new_width = int(new_width * ratio)
 
     if new_width != width or new_height != height:
-        log.info("Resizing image to ({}, {})".format(new_width, new_height))
+        log.info(f"Resizing image to ({new_width}, {new_height})")
         img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
 
     cv2.imwrite(output_file, img)
-    log.passed("Successfully wrote {}".format(output_file))
+    log.passed(f"Successfully wrote {output_file}")
 
 
 if __name__ == '__main__':

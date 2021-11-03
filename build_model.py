@@ -1,13 +1,15 @@
 #!/usr/bin/env python3.8
 """Create a 3D model of terrain"""
 
+from pathlib import Path
+
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType
 from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
+
 from geo import GPXFile, dem_to_model, get_cropped_elevation_filename
-from pathlib import Path
 
 @logargs
 @ValidateAndDefault({
@@ -61,13 +63,12 @@ def build_model(gpx_file,
     if not model_file:
         raise InvalidArgumentError("model_file must be specified")
 
-    log.info("Model boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(
-        max_lat, min_long, min_lat, max_long))
+    log.info(f"Model boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
     # Get the elevation data
     cache_dir = Path(cache_dir)
     dem_filename = Path(get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long))
-    log.debug("Looking for elevation data {}".format(cache_dir / dem_filename))
+    log.debug(f"Looking for elevation data {cache_dir / dem_filename}")
     if not (cache_dir / dem_filename).exists():
         raise ApplicationError("Missing elevation data")
 

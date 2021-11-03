@@ -1,13 +1,15 @@
 #!/usr/bin/env python3.8
 """Download 3D elevation data from USGS"""
 
+from pathlib import Path
+
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType
 from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import InvalidArgumentError
+
 from geo import GPXFile, get_dem_data, get_cropped_elevation_filename
-from pathlib import Path
 
 @logargs
 @ValidateAndDefault({
@@ -52,8 +54,7 @@ def download_elevation_data(gpx_file,
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to crop")
 
-    log.info("Model boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(
-        max_lat, min_long, min_lat, max_long))
+    log.info(f"Requested boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
     # Get the elevation data
     cache_dir = Path(cache_dir)

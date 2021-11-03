@@ -1,6 +1,8 @@
 #!/usr/bin/env python3.8
 """Crop a spatial image to given coordinates and convert it to a GeoTIFF"""
 
+import tempfile
+
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType, ItemList
@@ -8,7 +10,7 @@ from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import InvalidArgumentError, ApplicationError
 from pyapputil.shellutil import Shell
 from osgeo import gdal
-import tempfile
+
 from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, GDAL_ERROR
 
 
@@ -58,7 +60,7 @@ def main(gpx_file,
         # The python interface to this is horrifying, so use the command line app
         retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(input_file, " ".join(input_files)))
         if retcode != 0 or "ERROR" in stderr:
-            raise ApplicationError("Could not merge input files: {}".format(stderr))
+            raise ApplicationError(f"Could not merge input files: {stderr}")
     else:
         input_file = input_files[0]
 
@@ -72,7 +74,7 @@ def main(gpx_file,
         min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to crop")
-    log.debug("Requested crop boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(max_lat, min_long, min_lat, max_long))
+    log.debug(f"Requested crop boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
     # Open the file
     ds = gdal.Open(input_file)
@@ -80,7 +82,7 @@ def main(gpx_file,
 
     # Calculate the extent from the input file
     source_min_lat, source_min_long, source_max_lat, source_max_long = get_raster_boundaries_gps(ds)
-    log.debug("Source boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(source_max_lat, source_min_long, source_min_lat, source_max_long))
+    log.debug(f"Source boundaries top(max_lat)={source_max_lat} left(min_long)={source_min_long} bottom(min_lat)={source_min_lat} right(max_long)={source_max_long}")
 
     # Adjust output crop as necessary to fit the source image
     adjust = False
@@ -98,11 +100,11 @@ def main(gpx_file,
         adjust = True
     if adjust:
         log.info("Output boundary is outside of input boundary")
-        log.info("New crop boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(max_lat, min_long, min_lat, max_long))
+        log.info(f"New crop boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
     # Crop and convert the image
     convert_and_crop_raster(input_file, output_file, min_lat, min_long, max_lat, max_long, output_type="GTiff", remove_alpha=True)
-    log.passed("Successfully created {}".format(output_file))
+    log.passed(f"Successfully created {output_file}")
     return True
 
 

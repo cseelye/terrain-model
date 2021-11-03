@@ -1,36 +1,35 @@
 """Helpers for processing GIS data into 3D models"""
-from __future__ import print_function
-from gtm1.geotrimesh import mesh
+import bisect
+import math
+import os
+from pathlib import Path
+import shutil
+import tempfile
+from urllib.parse import urlparse
+import zipfile
+
+from affine import Affine
+from dateutil.parser import isoparse
+from lxml import etree as ET
+from osgeo import gdal, osr
 from pyapputil.logutil import GetLogger
 from pyapputil.exceptutil import ApplicationError
 from pyapputil.shellutil import Shell
+import requests
+
+from gtm1.geotrimesh import mesh
 from util import download_file
 
-from affine import Affine
-import bisect
-from dateutil.parser import isoparse
-from lxml import etree as ET
-import math
-import os
-from osgeo import gdal, osr
-from pathlib import Path
-import requests
-from requests import HTTPError
-import shutil
-import tempfile
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse
-import zipfile
 
 # Make GDAL throw exceptions for Failure/Fatal messages
 gdal.UseExceptions()
 
-class GdalObjectNoCheck(object):
-    pass
+class GdalObjectNoCheck:
+    """Dummy object to signal the GDAL error handler to not check"""
 
-class GdalErrorHandler(object):
+class GdalErrorHandler:
+    """Handle error message callbacks and error checking after GDAL function
+    calls"""
     def __init__(self):
         self.err_level = gdal.CE_None
         self.err_no = 0
@@ -38,22 +37,33 @@ class GdalErrorHandler(object):
         self.log = GetLogger()
 
     def handler(self, err_level, err_no, err_msg):
+        """GDAL error message callback"""
         self.err_level = err_level
         self.err_no = err_no
         self.err_msg = err_msg
 
     def check(self, extra_msg=None, gdal_obj=GdalObjectNoCheck()):
+        """
+        Check for a GDAL error after calling a GDAL function. This handles the
+        odd cases where GDAL does not throw an error but returnes an empty
+        result. This function will throw if there was a GDAL error.
+
+        Args:
+            extra_msg:  (string) Optional error message to add context.
+            gdal_obj:   (object) Optional GDAL object to check. Pass
+                                 GdalObjectNoCheck to skip the check.
+        """
         try:
             if not self.is_set():
                 return
 
-            app_msg = "{}: ".format(extra_msg) or ""
+            app_msg = f"{extra_msg}: " or ""
 
             # First check if we have an error set and raise/log if so
             if self.is_error():
-                raise ApplicationError("{}GDAL error {}: {}".format(app_msg, self.err_no, self.err_msg))
+                raise ApplicationError(f"{app_msg}GDAL error {self.err_no}: {self.err_msg}")
             if self.is_warning():
-                self.log.warning("GDAL warning {}: {}".format(self.err_no, self.err_msg))
+                self.log.warning(f"GDAL warning {self.err_no}: {self.err_msg}")
 
             # Sometimes GDAL deos not call the error handler even when there is an error
             # Check of the gdal object passed in is null
@@ -63,22 +73,25 @@ class GdalErrorHandler(object):
                 error_no = gdal.GetLastErrorNo()
                 error_level = gdal.GetLastErrorType()
                 if error_level and error_level > gdal.CE_None:
-                    raise ApplicationError("{}GDAL error - possible message {}: {}".format(app_msg, error_no, error_msg))
-                else:
-                    raise ApplicationError("{}GDAL error")
+                    raise ApplicationError(f"{app_msg}GDAL error - possible message {error_no}: {error_msg}")
+                raise ApplicationError(f"{app_msg}GDAL error")
         finally:
             self.reset()
 
     def reset(self):
+        """Reset the error so the handler can be used again"""
         self.err_level = gdal.CE_None
         self.err_no = 0
         self.err_msg = ""
 
     def is_set(self):
+        """Check if an error is set"""
         return self.err_level and self.err_level > gdal.CE_None
     def is_warning(self):
+        """Check if there was a warning"""
         return self.err_level == gdal.CE_Warning
     def is_error(self):
+        """Check if there was an error"""
         return self.err_level > gdal.CE_Warning
 
 GDAL_ERROR = GdalErrorHandler()
@@ -101,7 +114,7 @@ gdal.ConfigurePythonLogging(logger_name=MYLOG.name)
 # sr = osr.SpatialReference()
 # sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
 
-class WGS84(object):
+class WGS84:
     """Constants for WGS84 spheroid calculations"""
     m1 = 111132.9526
     m2 = -559.84957
@@ -112,26 +125,30 @@ class WGS84(object):
     p3 = 0.11774
     p4 = -0.000165
 
-class GPXFile(object):
+class GPXFile:
     """Abstract a GPX file and common operations on it"""
 
     def __init__(self, filename):
         """
         Args:
-            filename:   the name of the GPX file (str)
+            filename:   (str) The name of the GPX file.
         """
         self.filename = filename
 
     def GetBounds(self, padding=0, square=False):
         """
-        Get the min and max latitude and longitude values in the tracks in the GPX file
+        Get the min and max latitude and longitude values in the tracks in the
+        GPX file.
 
         Args:
-            padding:    additional padding to add around the bounds, in miles (float)
-            square:     square the region around the tracks instead of following them exactly (bool)
+            padding:    (float) Additional padding to add around the bounds, in
+                                miles.
+            square:     (bool)  Square the region around the tracks instead of
+                                following them exactly.
 
         Returns:
-            A tuple of floats (min_lat, min_long, max_lat, max_long)
+            (tuple of float) Bounding box coordinates min_lat, min_long,
+            max_lat, max_long.
         """
         log = GetLogger()
         tree = ET.parse(self.filename)
@@ -153,39 +170,46 @@ class GPXFile(object):
             if node_long < min_long:
                 min_long = node_long
         center_lat, center_long = ( (max_lat + min_lat)/2, (max_long + min_long)/2 )
-        log.debug2("GPX tracks min_lat={}, min_long={}, max_lat={}, max_long={}, center_lat={}, center_long={}".format(min_lat, min_long, max_lat, max_long, center_lat, center_long))
+        log.debug2(f"GPX tracks min_lat={min_lat}, min_long={min_long}, max_lat={max_lat}, max_long={max_long}, center_lat={center_lat}, center_long={center_long}")
 
         if square:
             width = max_long - min_long
             height = max_lat - min_lat
             size = max(width, height)
-            log.debug("width={}, height={}, size={}".format(width, height, size))
+            log.debug(f"width={width}, height={height}, size={size}")
             min_lat = center_lat - size/2
             max_lat = center_lat + size/2
             min_long = center_long - size/2
             max_long = center_long + size/2
-            log.debug2("Squared min_lat={}, min_long={}, max_lat={}, max_long={}".format(min_lat, min_long, max_lat, max_long))
+            log.debug2(f"Squared min_lat={min_lat}, min_long={min_long}, max_lat={max_lat}, max_long={max_long}")
 
         if padding != 0:
             min_lat -= padding / degree_lat_to_miles(center_lat)
             min_long -= padding / degree_long_to_miles(center_lat)
             max_lat += padding / degree_lat_to_miles(center_lat)
             max_long += padding / degree_long_to_miles(center_lat)
-            log.debug2("Padded min_lat={}, min_long={}, max_lat={}, max_long={}".format(min_lat, min_long, max_lat, max_long))
+            log.debug2(f"Padded min_lat={min_lat}, min_long={min_long}, max_lat={max_lat}, max_long={max_long}")
 
         return (min_lat, min_long, max_lat, max_long)
 
     def GetCenter(self):
         """
-        Get the coordinates of the center of the tracks in the GPX file
+        Get the coordinates of the center of the tracks in the GPX file.
 
         Returns:
-            A tuple of floats (center_lat, center_long)
+            (tuple of float) The center coordinates as lat,long.
         """
         min_lat, min_long, max_lat, max_long = self.GetBounds()
         return ( (max_lat - min_lat)/2, (max_long - min_long)/2 )
 
     def GetTrackPoints(self):
+        """
+        Get all of the points in all of the tracks.
+
+        Returns:
+            (list of list of tuple of float) A list of tracks where each track
+            is a list of tuples of float as lat,long.
+        """
         tracks = []
         tree = ET.parse(self.filename)
         root = tree.getroot()
@@ -199,38 +223,44 @@ class GPXFile(object):
         return tracks
 
     def ToCSV(self, csvfile):
+        """
+        Convert the GPX tracks to a CSV file.
+
+        Args:
+            csvfile:    (string) The file path to save the tracks to.
+        """
         tree = ET.parse(self.filename)
         root = tree.getroot()
-        with open(csvfile, "w") as outfile:
+        with open(csvfile, "w", encoding="utf-8") as outfile:
             outfile.write("LON,LAT\n")
             for node in root.findall("trk/trkseg/trkpt", root.nsmap):
                 node_lat = float(node.attrib["lat"])
                 node_long = float(node.attrib["lon"])
-                outfile.write("{},{}\n".format(node_long, node_lat))
+                outfile.write(f"{node_long},{node_lat}\n")
 
 
 def degree_long_to_miles(lat):
     """
-    Calculate the length of 1 degree of longitude in miles at a given latitude
+    Calculate the length of 1 degree of longitude in miles at a given latitude.
 
     Args:
-        lat:    latitude to measure at, in decimal degrees (float)
+        lat:    (float) Latitude to measure at, in decimal degrees.
 
     Returns:
-        The length in miles (float)
+        (float) The length in miles.
     """
     rads = lat * 2 * math.pi / 360
     return (WGS84.p1 * math.cos(rads) + WGS84.p2 * math.cos(3*rads) + WGS84.p3 * math.cos(5*rads)) * 0.000621371
 
 def degree_lat_to_miles(lat):
     """
-    Calculate the length of 1 degree of latitude at a given latitude
+    Calculate the length of 1 degree of latitude in miles at a given latitude.
 
     Args:
-        lat:    latitude to measure at, in decimal degrees (float)
+        lat:    (float) Latitude to measure at, in decimal degrees.
 
     Returns:
-        The length in miles (float)
+        (float) The length in miles.
     """
     rads = lat * 2 * math.pi / 360
     return (WGS84.m1 + WGS84.m2 * math.cos(2*rads) + WGS84.m3 * math.cos(4*rads) + WGS84.m4 * math.cos(6*rads)) * 0.000621371
@@ -254,26 +284,16 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
     center_lat =  (max_lat + min_lat)/2
     real_width = (max_long - min_long) * degree_long_to_miles(center_lat)
     real_height = (max_lat - min_lat) * degree_lat_to_miles(center_lat)
-    log.debug("Cropping to {}mi wide by {}mi high".format(real_width, real_height))
+    log.debug(f"Cropping to {real_width}mi wide by {real_height}mi high")
 
     # Using shell commands for this because the native python interface isn't working after recent GDAL upgrade plus testing agaisnt more types of input files
     # Use shell commands until I have time to debug/fix the native code
-    from pyapputil.shellutil import Shell
-    log.info("Cropping to boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(max_lat, min_long, min_lat, max_long))
-    log.info("Converting to {}".format(output_type))
+    log.info(f"Cropping to boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
+    log.info(f"Converting to {output_type}")
     band_args = "-b 1 -b 2 -b 3" if remove_alpha else ""
-    retcode, _, stderr = Shell("gdal_translate -of {output_type} {band_args} -projwin_srs EPSG:4326 -projwin {min_long} {max_lat} {max_long} {min_lat} {infile} {outfile}".format(
-        output_type=output_type,
-        band_args=band_args,
-        max_lat=max_lat,
-        min_lat=min_lat,
-        max_long=max_long,
-        min_long=min_long,
-        infile=input_filename,
-        outfile=output_filename
-    ))
+    retcode, _, stderr = Shell(f"gdal_translate -of {output_type} {band_args} -projwin_srs EPSG:4326 -projwin {min_long} {max_lat} {max_long} {min_lat} {input_filename} {output_filename}")
     if retcode != 0 or "ERROR" in stderr:
-        raise ApplicationError("Could not crop file: {}".format(stderr))
+        raise ApplicationError(f"Could not crop file: {stderr}")
 
     # ds = gdal.Open(str(input_filename))
     # GDAL_ERROR.check("Error parsing input file", ds)
@@ -311,12 +331,13 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
 
 def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
     """
-    Convert a DEM file to an x3d model file
+    Convert a DEM file to an x3d model file.
 
     Args:
-        dem_filename:       name of the input DEM data file (string)
-        model_filename:     name of the output file to create (string)
-        z_exaggeration:     multiplier to appy to the Z elevation values (float)
+        dem_filename:       (string) Name of the input DEM data file.
+        model_filename:     (string) Name of the output file to create.
+        z_exaggeration:     (float)  Multiplier to appy to the Z elevation
+                                     values.
     """
     log = GetLogger()
 
@@ -329,20 +350,17 @@ def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
                             mesh_prefix=outprefix,
                             z_exaggeration=z_exaggeration)
 
-def dem_to_model2(dem_filename, model_filename, z_exaggeration=1.0):
-    """
-    """
-
-
 def get_raster_boundaries_geo(data_source):
     """
-    Get the min and max image georeferenced coordinates of the area of the image
+    Get the min and max image georeferenced coordinates of the area of the
+    image.
 
     Args:
-        data_source:    a GDAL dataset (osgeo.gdal.Dataset)
+        data_source:    (osgeo.gdal.Dataset) The GDAL dataset to measure.
 
     Returns:
-        A tuple of floats (min_col, min_row, max_col, max_row)
+        (tuple of float) The bounding box as min_col, min_row, max_col,
+        max_row.
     """
     gt = data_source.GetGeoTransform()
     GDAL_ERROR.check("Error reading geotransform", gt)
@@ -355,13 +373,14 @@ def get_raster_boundaries_geo(data_source):
 
 def get_raster_boundaries_gps(data_source):
     """
-    Get the min and max image GPS coordinates of the area of the image
+    Get the min and max image GPS coordinates of the area of the image.
 
     Args:
-        data_source:    a GDAL dataset (osgeo.gdal.Dataset)
+        data_source:    (osgeo.gdal.Dataset) The GDAL dataset to measure.
 
     Returns:
-        A tuple of floats (min_lat, min_long, max_lat, max_long)
+        (tuple of float) The bounding box as as min_lat, min_long, max_lat,
+        max_long.
     """
     source_extent = get_raster_boundaries_geo(data_source)
     source_srs = osr.SpatialReference()
@@ -374,31 +393,26 @@ def get_raster_boundaries_gps(data_source):
     return (min_lat, min_long, max_lat, max_long)
 
 def get_elevation_tilename(latitude, longitude):
-    """
-    Get the filename for a tile covering the given coordinates.
-    """
+    """Get the filename for a tile covering the given coordinates"""
     upper = int(math.ceil(latitude))
     left = int(math.floor(longitude))
-    return "dem-{}.tif".format(get_coords_string(upper, left))
+    return f"dem-{get_coords_string(upper, left)}.tif"
 
 def get_image_tile_name(latitude, longitude):
-    """
-    Get the filename for an image tile covering the given coordinates.
-    """
-    return "image-{}.tif".format(get_coords_string(latitude, longitude))
+    """Get the filename for an image tile covering the given coordinates"""
+    return f"image-{get_coords_string(latitude, longitude)}.tif"
 
 def get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long):
-    return "cropped-dem-{coords_ul}_{coords_lr}.tif".format(
-                    coords_ul=get_coords_string(max_lat, min_long),
-                    coords_lr=get_coords_string(min_lat, max_long))
+    """Get the filename for a cropped elevation file for a given area"""
+    return f"cropped-dem-{get_coords_string(max_lat, min_long)}_{get_coords_string(min_lat, max_long)}.tif"
 
 def get_cropped_image_filename(max_lat, min_long, min_lat, max_long):
-    return "cropped-image-{coords_ul}_{coords_lr}.tif".format(
-                    coords_ul=get_coords_string(max_lat, min_long),
-                    coords_lr=get_coords_string(min_lat, max_long))
+    """Get the filename for a cropped image file for a given area"""
+    return f"cropped-image-{get_coords_string(max_lat, min_long)}_{get_coords_string(min_lat, max_long)}.tif"
 
 def get_coords_string(latitude, longitude):
-    return "{}{}{}{}".format("n" if latitude > 0 else "s",
+    """Get our standard string representation of lat/long"""
+    return "{}{}{}{}".format("n" if latitude > 0 else "s",          #pylint: disable=consider-using-f-string
                                  abs(latitude),
                                  "e" if longitude > 0 else "w",
                                  abs(longitude))
@@ -411,12 +425,12 @@ def download_elevation_tile(latitude, longitude, dest_dir):
     the file already exists in the destination no action will be taken.
 
     Args:
-        latitude:   latitude of a point in the region
-        longitude:  longitude of a point in the region
-        dest_dir:   the directory to download the tile to
+        latitude:   (float) Latitude of a point in the region.
+        longitude:  (float) Longitude of a point in the region.
+        dest_dir:   (Path)  The directory to download the tile to.
 
     Returns:
-        The full path of the elevation file (Path)
+        (Path) The full path of the elevation file.
     """
     log = GetLogger()
 
@@ -428,16 +442,16 @@ def download_elevation_tile(latitude, longitude, dest_dir):
 
     # Check the local cache to see if we already have this tile
     output_file = dest_dir / Path(get_elevation_tilename(latitude, longitude))
-    log.debug("Checking cache for {}".format(output_file))
+    log.debug(f"Checking cache for {output_file}")
     if output_file.exists():
-        log.info("Using cached elevation data for ({},{})".format(upper, left))
+        log.info(f"Using cached elevation data for ({upper},{left})")
         return output_file
 
     # Query the National Map API for elevation products
-    log.info("Downloading elevation data for ({},{})".format(upper, left))
+    log.info(f"Downloading elevation data for ({upper},{left})")
     query_url = "https://tnmaccess.nationalmap.gov/api/v1/products"
     payload = {
-        "bbox": "{},{},{},{}".format(left, upper, left, upper),
+        "bbox": f"{left},{upper},{left},{upper}",
         "datasets": "National Elevation Dataset (NED) 1/3 arc-second",
         "max": 10
     }
@@ -463,15 +477,12 @@ def download_elevation_tile(latitude, longitude, dest_dir):
         # Extract if necessary
         if local_filename.suffix == ".zip":
             log.info("Extracting elevation data file")
-            log.debug("Extracting {} to {}".format(local_filename, download_dir))
-            archive = zipfile.ZipFile(local_filename)
-            archive.extractall(path=download_dir)
+            log.debug(f"Extracting {local_filename} to {download_dir}")
+            with zipfile.ZipFile(local_filename) as archive:
+                archive.extractall(path=download_dir)
             # Find the data file in the zip
-            coords = "{}{}{}{}".format("n" if upper > 0 else "s",
-                                    abs(upper),
-                                    "e" if left > 0 else "w",
-                                    abs(left))
-            known_filenames = ["grd{}_13".format(coords), "USGS_NED_13_{}_IMG.img".format(coords), "img{}_13.img".format(coords)]
+            coords = get_coords_string(upper, left)
+            known_filenames = [f"grd{coords}_13", f"USGS_NED_13_{coords}_IMG.img", f"img{coords}_13.img"]
             for fname in known_filenames:
                 if (download_dir / fname).exists():
                     data_filename = download_dir / fname
@@ -480,13 +491,9 @@ def download_elevation_tile(latitude, longitude, dest_dir):
             data_filename = local_filename
 
         # Convert to GeoTIFF
-        retcode, _, stderr = Shell("gdal_translate -of {output_type} {infile} {outfile}".format(
-            output_type="GTiff",
-            infile=data_filename,
-            outfile=output_file
-        ))
+        retcode, _, stderr = Shell(f"gdal_translate -of GTiff {data_filename} {output_file}")
         if retcode != 0 or "ERROR" in stderr:
-            raise ApplicationError("Could not convert tile: {}".format(stderr))
+            raise ApplicationError(f"Could not convert tile: {stderr}")
 
         return output_file
 
@@ -498,12 +505,12 @@ def download_image_tile(latitude, longitude, dest_dir):
     exists in the destination no action will be taken.
 
     Args:
-        latitude:   latitude of the upper left corner of the region
-        longitude:  longitude of the upper left corner of the region
-        dest_dir:   the directory to download the tile to
+        latitude:   (float) Latitude of a point in the region.
+        longitude:  (float) Longitude of a point in the region.
+        dest_dir:   (Path)  The directory to download the tile to.
 
     Returns:
-        The full path of the image file (Path)
+        (Path) The full path of the image file.
     """
     log = GetLogger()
 
@@ -512,16 +519,16 @@ def download_image_tile(latitude, longitude, dest_dir):
 
     # Check the local cache to see if we already have this tile
     output_file = dest_dir / Path(get_image_tile_name(latitude, longitude))
-    log.debug("Checking cache for {}".format(output_file))
+    log.debug(f"Checking cache for {output_file}")
     if output_file.exists():
-        log.info("Using cached elevation data for ({},{})".format(latitude, longitude))
+        log.info(f"Using cached elevation data for ({latitude},{longitude})")
         return output_file
 
     # Query the National Map API for image products
-    log.info("Downloading image data for ({},{})".format(latitude, longitude))
+    log.info(f"Downloading image data for ({latitude},{longitude})")
     query_url = "https://tnmaccess.nationalmap.gov/api/v1/products"
     payload = {
-        "bbox": "{},{},{},{}".format(longitude, latitude, longitude, latitude),
+        "bbox": f"{longitude},{latitude},{longitude},{latitude}",
         "datasets": "USDA National Agriculture Imagery Program (NAIP)",
         "max": 100
     }
@@ -550,34 +557,94 @@ def download_image_tile(latitude, longitude, dest_dir):
         return output_file
 
 def get_image_tile_interval():
+    """Get the tile size for image tiles"""
     # USGS distributes elevation data in 3.75' tiles, 3.75' = 0.0625 degree
     return 0.0625
 
 def get_elevation_tile_interval():
+    """Get the tile size for elevation tiles"""
     # USGS distributes elevation data in 1 degree tiles
     return 1
 
 def get_image_tile_coords(latitude, longitude):
     """
-    Get the coordinates of the upper left corner of the image tile containing a point
+    Get the coordinates of the upper left corner of the image tile
+    containing the point.
+
+    Args:
+        latitude:    (float) The latitude of the point.
+        longitude:   (float) The longitude of the point.
+
+    Returns:
+        (tuple of float) lat,long coordinates of the upper left corner of the
+        image tile that covers the point.
     """
     return get_tile_coords_range(latitude, latitude, longitude, longitude, get_image_tile_interval())[0]
 
 def get_image_tile_range(min_lat, min_long, max_lat, max_long):
+    """
+    Get the coordinates of the upper left corners of the list of image
+    tiles containing the region.
+
+    Args:
+        min_lat:    (float) The minimum latitude (farthest south).
+        min_long:   (float) The minimum longitude (farthest west).
+        max_lat:    (float) The maximum latitude (farthest north).
+        max_long:   (float) The maximum longitude (farthest east).
+
+    Returns:
+        (list of tuple of float) A list of lat,long coordinates of the upper
+        left corner of each image tile needed to cover the area.
+    """
     return get_tile_coords_range(min_lat, min_long, max_lat, max_long, get_image_tile_interval())
 
 def get_elevation_tile_coords(latitude, longitude):
     """
-    Get the coordinates of the upper left corner of the elevation tile containing a point
+    Get the coordinates of the upper left corner of the elevation tile
+    containing the point.
+
+    Args:
+        latitude:    (float) The latitude of the point.
+        longitude:   (float) The longitude of the point.
+
+    Returns:
+        (tuple of float) lat,long coordinates of the upper left corner of the
+        elevation tile that covers the point.
     """
     return get_tile_coords_range(latitude, latitude, longitude, longitude, get_elevation_tile_interval())[0]
 
 def get_elevation_tile_range(min_lat, min_long, max_lat, max_long):
+    """
+    Get the coordinates of the upper left corners of the list of elevation
+    tiles containing the region.
+
+    Args:
+        min_lat:    (float) The minimum latitude (farthest south).
+        min_long:   (float) The minimum longitude (farthest west).
+        max_lat:    (float) The maximum latitude (farthest north).
+        max_long:   (float) The maximum longitude (farthest east).
+
+    Returns:
+        (list of tuple of float) A list of lat,long coordinates of the upper
+        left corner of each elevation tile needed to cover the area.
+    """
     return get_tile_coords_range(min_lat, min_long, max_lat, max_long, get_elevation_tile_interval())
 
 def get_tile_coords_range(min_lat, min_long, max_lat, max_long, interval):
     """
-    Get the coordinates of the upper left corner of the image tile containing a point
+    Get the coordinates of the upper left corners of the list tiles containing
+    the region.
+
+    Args:
+        min_lat:    (float) The minimum latitude (farthest south).
+        min_long:   (float) The minimum longitude (farthest west).
+        max_lat:    (float) The maximum latitude (farthest north).
+        max_long:   (float) The maximum longitude (farthest east).
+        interval:   (float) The size of a tile.
+
+    Returns:
+        (list of tuple of float) A list of lat,long coordinates of the upper
+        left corner of each tile needed to cover the area.
     """
     upper = int(math.ceil(abs(max_lat)))
     if max_lat < 0:
@@ -612,21 +679,22 @@ def get_tile_coords_range(min_lat, min_long, max_lat, max_long, interval):
 
 def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=Path("cache")):
     """
-    Get the elevation data for the given region. This will download, crop and convert the requested elevation data
+    Get the elevation data for the given region. This will download, crop and
+    convert the requested elevation data.
 
     Args:
-        dem_filename:   file to save the elevation data to (Path)
-        min_lat:        south border of the region (float)
-        min_long:       east border of the region (float)
-        max_lat:        north border of the region (float)
-        max_long:       west border of the region (float)
-        cache_dir:      the path to save/look for the elevation data (Path)
+        dem_filename:   (Path)  File to save the elevation data to.
+        min_lat:        (float) South border of the region.
+        min_long:       (float) East border of the region.
+        max_lat:        (float) North border of the region.
+        max_long:       (float) West border of the region.
+        cache_dir:      (Path)  The path to save/look for the elevation data.
     """
     log = GetLogger()
 
-    log.debug("Checking cache for {}".format(cache_dir / dem_filename))
+    log.debug(f"Checking cache for {cache_dir / dem_filename}")
     if (cache_dir / dem_filename).exists():
-        log.info("Using cached elevation data file {}".format(dem_filename))
+        log.info(f"Using cached elevation data file {dem_filename}")
         return
 
     # Make a list of elevation tiles we need to cover this region and download them
@@ -637,11 +705,12 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=P
         elevation_files.append(tile_file)
 
     # Create a virtual data source with all of the tiles
-    log.debug("Creating virtual data set with tiles {}".format(",".join(str(f) for f in elevation_files)))
+    file_list = [" ".join(str(f) for f in elevation_files)]
+    log.debug(f"Creating virtual data set with tiles [{file_list}]")
     _, crop_input_file = tempfile.mkstemp()
-    retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(crop_input_file, " ".join(str(f) for f in elevation_files)))
+    retcode, _, stderr = Shell(f"gdalbuildvrt {crop_input_file} {file_list}")
     if retcode != 0 or "ERROR" in stderr:
-        raise ApplicationError("Could not merge input files: {}".format(stderr))
+        raise ApplicationError(f"Could not merge input files: {stderr}")
 
     # Crop to the requested region and convert to geotiff
     log.info("Converting and cropping elevation data")
@@ -649,19 +718,21 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=P
 
 def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir="cache"):
     """
-    Get the imagery data for the given region. This will download, crop and convert the requested data
+    Get the imagery data for the given region. This will download, crop and
+    convert the requested data.
 
     Args:
-        image_filename:     file to save the image to (Path)
-        min_lat:            south border of the region (float)
-        min_long:           east border of the region (float)
-        max_lat:            north border of the region (float)
-        max_long:           west border of the region (float)
+        image_filename: (Path)  File to save the image to.
+        min_lat:        (float) South border of the region.
+        min_long:       (float) East border of the region.
+        max_lat:        (float) North border of the region.
+        max_long:       (float) West border of the region.
+        cache_dir:      (Path)  The path to save/look for the image data.
     """
     log = GetLogger()
 
     if (cache_dir / image_filename).exists():
-        log.info("Using cached image file {}".format(image_filename))
+        log.info(f"Using cached image file {image_filename}")
         return
 
     # Make a list of image tiles we need to cover this region and download them
@@ -672,11 +743,12 @@ def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_d
         image_files.append(tile_file)
 
     # Create a virtual data source with all of the tiles
-    log.debug("Creating virtual data set with tiles {}".format(",".join(str(f) for f in image_files)))
+    file_list = [" ".join(str(f) for f in image_files)]
+    log.debug(f"Creating virtual data set with tiles [{file_list}]")
     _, crop_input_file = tempfile.mkstemp()
-    retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(crop_input_file, " ".join(str(f) for f in image_files)))
+    retcode, _, stderr = Shell(f"gdalbuildvrt {crop_input_file} {file_list}")
     if retcode != 0 or "ERROR" in stderr:
-        raise ApplicationError("Could not merge input files: {}".format(stderr))
+        raise ApplicationError(f"Could not merge input files: {stderr}")
 
     # Crop to the requested region and convert to geotiff
     log.info("Converting and cropping image data")
