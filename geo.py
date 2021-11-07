@@ -18,6 +18,7 @@ from pyapputil.shellutil import Shell
 import requests
 
 from gtm1.geotrimesh import mesh
+from gtm2.generate_terrain import generate_terrain as gtm2_generate_terrain
 from util import download_file
 
 
@@ -177,17 +178,17 @@ class GPXFile:
             height = max_lat - min_lat
             size = max(width, height)
             log.debug(f"width={width}, height={height}, size={size}")
-            min_lat = center_lat - size/2
-            max_lat = center_lat + size/2
-            min_long = center_long - size/2
-            max_long = center_long + size/2
+            min_lat = round(center_lat - size/2, 7)
+            max_lat = round(center_lat + size/2, 7)
+            min_long = round(center_long - size/2, 7)
+            max_long = round(center_long + size/2, 7)
             log.debug2(f"Squared min_lat={min_lat}, min_long={min_long}, max_lat={max_lat}, max_long={max_long}")
 
         if padding != 0:
-            min_lat -= padding / degree_lat_to_miles(center_lat)
-            min_long -= padding / degree_long_to_miles(center_lat)
-            max_lat += padding / degree_lat_to_miles(center_lat)
-            max_long += padding / degree_long_to_miles(center_lat)
+            min_lat = round(min_lat - padding / degree_lat_to_miles(center_lat), 7)
+            min_long = round(min_long - padding / degree_long_to_miles(center_lat), 7)
+            max_lat = round(max_lat + padding / degree_lat_to_miles(center_lat), 7)
+            max_long = round(max_long + padding / degree_long_to_miles(center_lat), 7)
             log.debug2(f"Padded min_lat={min_lat}, min_long={min_long}, max_lat={max_lat}, max_long={max_long}")
 
         return (min_lat, min_long, max_lat, max_long)
@@ -200,7 +201,7 @@ class GPXFile:
             (tuple of float) The center coordinates as lat,long.
         """
         min_lat, min_long, max_lat, max_long = self.GetBounds()
-        return ( (max_lat - min_lat)/2, (max_long - min_long)/2 )
+        return ( round((max_lat - min_lat)/2, 7), round((max_long - min_long)/2, 7) )
 
     def GetTrackPoints(self):
         """
@@ -350,6 +351,35 @@ def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
                             mesh_prefix=outprefix,
                             z_exaggeration=z_exaggeration)
 
+def dem_to_model2(dem_filename, model_filename, z_exaggeration=1.0):
+    """
+    Convert a DEM file to an stl model file.
+
+    Args:
+        dem_filename:       (string) Name of the input DEM data file.
+        model_filename:     (string) Name of the output file to create.
+        z_exaggeration:     (float)  Multiplier to appy to the Z elevation
+                                     values.
+    """
+    log = GetLogger()
+
+    if Path(model_filename).suffix != ".stl":
+        model_filename += ".stl"
+
+    # Use geotrimesh.generate_terrain to create an scad file from the elevation data
+    scad_command_lines = gtm2_generate_terrain(dem_filename, z_scale=z_exaggeration, clippoly_filepath=None)
+    scad_command_lines = [str.encode(l) for l in scad_command_lines]
+
+    with tempfile.NamedTemporaryFile(delete=False) as scad_file:
+        scad_file.writelines(scad_command_lines)
+        scad_file.close()
+
+        # Use openscad to convert the scad file to an STL file
+        log.info("  Rendering to STL")
+        retcode, _, stderr = Shell(f"openscad -o {model_filename} {scad_file.name}")
+        if retcode != 0 or "ERROR" in stderr:
+            raise ApplicationError(f"Could not render scad file to stl: {stderr}")
+
 def get_raster_boundaries_geo(data_source):
     """
     Get the min and max image georeferenced coordinates of the area of the
@@ -385,8 +415,10 @@ def get_raster_boundaries_gps(data_source):
     source_extent = get_raster_boundaries_geo(data_source)
     source_srs = osr.SpatialReference()
     source_srs.ImportFromWkt(data_source.GetProjection())
+    source_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     target_srs = osr.SpatialReference()
     target_srs.ImportFromEPSG(4326) # WGS84
+    target_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     trans = osr.CoordinateTransformation(source_srs, target_srs)
     min_long, max_lat, _ = trans.TransformPoint(source_extent[0], source_extent[3], 0.0)
     max_long, min_lat, _ = trans.TransformPoint(source_extent[2], source_extent[1], 0.0)
@@ -400,7 +432,7 @@ def get_elevation_tilename(latitude, longitude):
 
 def get_image_tile_name(latitude, longitude):
     """Get the filename for an image tile covering the given coordinates"""
-    return f"image-{get_coords_string(latitude, longitude)}.tif"
+    return f"image-{get_coords_string(latitude, longitude)}.jp2"
 
 def get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long):
     """Get the filename for a cropped elevation file for a given area"""
@@ -413,9 +445,9 @@ def get_cropped_image_filename(max_lat, min_long, min_lat, max_long):
 def get_coords_string(latitude, longitude):
     """Get our standard string representation of lat/long"""
     return "{}{}{}{}".format("n" if latitude > 0 else "s",          #pylint: disable=consider-using-f-string
-                                 abs(latitude),
+                                 round(abs(latitude), 7),
                                  "e" if longitude > 0 else "w",
-                                 abs(longitude))
+                                 round(abs(longitude), 7))
 
 def download_elevation_tile(latitude, longitude, dest_dir):
     """
@@ -495,6 +527,8 @@ def download_elevation_tile(latitude, longitude, dest_dir):
         if retcode != 0 or "ERROR" in stderr:
             raise ApplicationError(f"Could not convert tile: {stderr}")
 
+        log.info(f"Added elevation data to cache for ({upper},{left})")
+
         return output_file
 
 def download_image_tile(latitude, longitude, dest_dir):
@@ -521,7 +555,7 @@ def download_image_tile(latitude, longitude, dest_dir):
     output_file = dest_dir / Path(get_image_tile_name(latitude, longitude))
     log.debug(f"Checking cache for {output_file}")
     if output_file.exists():
-        log.info(f"Using cached elevation data for ({latitude},{longitude})")
+        log.info(f"Using cached image for ({latitude},{longitude})")
         return output_file
 
     # Query the National Map API for image products
@@ -553,6 +587,7 @@ def download_image_tile(latitude, longitude, dest_dir):
 
         # Move the downloaded file to the final location
         shutil.move(local_filename, output_file)
+        log.info(f"Added image to cache for ({latitude},{longitude})")
 
         return output_file
 
@@ -705,7 +740,7 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=P
         elevation_files.append(tile_file)
 
     # Create a virtual data source with all of the tiles
-    file_list = [" ".join(str(f) for f in elevation_files)]
+    file_list = " ".join(str(f) for f in elevation_files)
     log.debug(f"Creating virtual data set with tiles [{file_list}]")
     _, crop_input_file = tempfile.mkstemp()
     retcode, _, stderr = Shell(f"gdalbuildvrt {crop_input_file} {file_list}")
@@ -743,7 +778,7 @@ def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_d
         image_files.append(tile_file)
 
     # Create a virtual data source with all of the tiles
-    file_list = [" ".join(str(f) for f in image_files)]
+    file_list = " ".join(str(f) for f in image_files)
     log.debug(f"Creating virtual data set with tiles [{file_list}]")
     _, crop_input_file = tempfile.mkstemp()
     retcode, _, stderr = Shell(f"gdalbuildvrt {crop_input_file} {file_list}")
