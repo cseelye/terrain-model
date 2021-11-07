@@ -9,7 +9,7 @@ from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, B
 from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
 
-from geo import GPXFile, dem_to_model, get_cropped_elevation_filename
+from geo import GPXFile, dem_to_model2, get_cropped_elevation_filename
 
 @logargs
 @ValidateAndDefault({
@@ -21,6 +21,7 @@ from geo import GPXFile, dem_to_model, get_cropped_elevation_filename
     "min_long" : (OptionalValueType(float), None),
     "max_lat" : (OptionalValueType(float), None),
     "max_long" : (OptionalValueType(float), None),
+    "dem_filename" : (OptionalValueType(StrType()), None),
     "model_file" : (OptionalValueType(StrType()), None),
     "z_exaggeration" : (float, 1.0),
     "cache_dir" : (StrType(), "cache"),
@@ -34,6 +35,7 @@ def build_model(gpx_file,
                 max_long,
                 model_file,
                 z_exaggeration,
+                dem_filename,
                 cache_dir):
     """
     Create a 3D model of terrain
@@ -66,15 +68,22 @@ def build_model(gpx_file,
     log.info(f"Model boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
     # Get the elevation data
-    cache_dir = Path(cache_dir)
-    dem_filename = Path(get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long))
-    log.debug(f"Looking for elevation data {cache_dir / dem_filename}")
-    if not (cache_dir / dem_filename).exists():
-        raise ApplicationError("Missing elevation data")
+    if dem_filename:
+        if not Path(dem_filename).exists():
+            raise InvalidArgumentError("DEM file does not exist")
+    else:
+        cache_dir = Path(cache_dir)
+        dem_filename = Path(get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long))
+        log.debug(f"Looking for elevation data {cache_dir / dem_filename}")
+        if not (cache_dir / dem_filename).exists():
+            raise ApplicationError("Could not find elevation data")
 
     # Create the model from the elevation data
     log.info("Creating 3D model from elevation data")
-    dem_to_model(cache_dir / dem_filename, model_file, z_exaggeration)
+    dem_to_model2(cache_dir / dem_filename, model_file, z_exaggeration)
+
+    log.passed(f"Successfully created model {model_file}")
+    return True
 
 
 if __name__ == '__main__':
@@ -89,7 +98,8 @@ if __name__ == '__main__':
     area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
     parser.add_argument("-z", "--z-exaggeration", type=float, default=1.0, metavar="", help="Amount of z-axis exaggeration to use in the model")
     parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="Model file to write out. If not specified, the name will be derived from the GPX file")
-    parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to keep downloaded data/working files in. Reusing these files can speed up multiple runs against the same input")
+    parser.add_argument("-i", "--input-dem-file", type=StrType(), dest="dem_filename", metavar="FILENAME", help="Elevation data file to use. If this is not specified, the script will look for the appropriate elevation data in the cache directory instead")
+    parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to look for data files in, if input-dem-file was not specified")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(build_model, args)
