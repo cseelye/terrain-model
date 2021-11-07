@@ -2,8 +2,9 @@
 This tool will create a 3D model in Blender given a set of GPS coordinates. This is still a work in progress, so it should work pretty well but there are occasional bugs and not everything is automated yet.
 
 I built this primarily to take a GPX route from a hike or four wheeling trip and create a full color, printable 3D model.
-
-![model preview](blender_preview.png)
+<p align="center">
+<img src="blender_preview.png" alt="blender preview"/>  <img src="blender_preview2.png"  alt="blender preview2"/>
+</p>
 
 ## Workflow
 This is the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files.
@@ -35,7 +36,7 @@ docker container run --rm -it -v $(pwd):/work -w /work terrain-model
 ./download_elevation_data.py --gpx-file work/hitw.gpx \
                              --padding 0.2
 ```
-4. Create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the mountains more prominent. I find this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
+4. Create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the features more prominent. I find this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
 ```
 ./build_model.py --gpx-file work/hitw.gpx \
                  --padding 0.2 \
