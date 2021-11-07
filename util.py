@@ -52,7 +52,7 @@ class Color:
         """Initialize this Color object from a string color name or tuple of RGB"""
 
         if not color:
-            raise ApplicationError("color cannot be empty")
+            raise InvalidArgumentError("color cannot be empty")
 
         if isinstance(color, Color):
             self.name = color.name
