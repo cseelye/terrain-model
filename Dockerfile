@@ -1,6 +1,24 @@
 ARG GDAL_VERSION=3.3.2
 
 
+FROM ubuntu:20.04 as gdal_build
+
+RUN printf '\
+APT::Install-Recommends "0";\n\
+APT::Install-Suggests "0";\n\
+' >> /etc/apt/apt.conf.d/01norecommends
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get udpate && \
+    apt-get install --yes \
+    g++-9-x86-64-linux-gnu
+
+
+
+
+
+
+
+
 # Build stage
 FROM osgeo/gdal:ubuntu-small-${GDAL_VERSION} as build
 ARG BLENDER_BRANCH="blender-v2.93-release"
@@ -78,6 +96,7 @@ RUN apt-get update && \
         libxrender1 \
         libgl1 \
         libgomp1 \
+        openscad \
     && \
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F23C5A6CF475977595C89F51BA6932366A755776 && \
     echo "deb http://ppa.launchpad.net/deadsnakes/ppa/ubuntu focal main" > /etc/apt/sources.list.d/deadsnakes.list && \
@@ -98,6 +117,7 @@ RUN apt-get update && \
         git \
         python3-distutils \
         python3.9-distutils \
+        vim \
         && \
     apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/* && \
     curl https://bootstrap.pypa.io/get-pip.py | python3 && \
