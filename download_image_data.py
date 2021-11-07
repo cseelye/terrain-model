@@ -52,18 +52,21 @@ def download_elevation_data(gpx_file,
         min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
 
     if None in (min_lat, min_long, max_lat, max_long):
-        raise InvalidArgumentError("You must specify an area to crop")
+        raise InvalidArgumentError("You must specify an area to download")
 
     log.info(f"Requested boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
-    # Get the elevation data
+    # Get the image data
     cache_dir = Path(cache_dir)
-    dem_filename = Path(get_cropped_image_filename(max_lat, min_long, min_lat, max_long))
-    get_image_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+    image_filename = Path(get_cropped_image_filename(max_lat, min_long, min_lat, max_long))
+    get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+
+    log.passed("Successfully downloaded images")
+    return True
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Download satellite imagery from USGS")
+    parser = ArgumentParser(description="Download satellite imagery from USGS and store in local cache directory")
     area_group = parser.add_argument_group("Area specification", "The area covered by the images can be specified either with a GPX track or by absolute lat/long coordinates")
     area_group.add_argument("-g", "--gpx-file", type=StrType(), metavar="FILENAME", help="GPX file to use")
     area_group.add_argument("-p", "--padding", type=float, metavar="MILES", help="Padding to add around the GPX track, in miles")
