@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#!/usr/bin/env python3
 """Download satellite imagery from USGS"""
 
 from pathlib import Path

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#!/usr/bin/env python3
 """Create a 3D model of terrain"""
 
 from pathlib import Path

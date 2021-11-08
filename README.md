@@ -68,11 +68,7 @@ Download orthoimages from [The National Map](https://apps.nationalmap.gov/downlo
 To get elevation data, select "Elevation Products (3DEP)" instead of Imagery.
 
 ## About the Container Image
-The container image is based on the official GDAL container image release, because I wanted an up-to-date version of GDAL but did not want to spend my time building it myself. At the time of this writing, the official container is based on Ubuntu 20.04 and comes with python 3.8 and the GDAL python libraries installed in that python.
-
-On top of the GDAL container, I build blender from source so that we can get the bpy python library. However, blender is very picky about python compatibility and at the time of this writing I am using blender 2.93 LTS which is using python 3.9.
-
-So in the container there are two python3 versions, each required for a different part of the workflow: python3.8 for the parts that use GDAL and python3.9 for the parts that use blender.
+The image build is complex because of the way GDAL and Blender work. GDAL doesn't install via pip, it needs to be built from source. The Blender python libraries are very sensitive to python versions and only work with the particular python version built along with that particular Blender version. The current blender python is 3.9, but the ubuntu 20.04 system python is 3.8, and the pre-built GDAL libraries/containers are made with python 3.8... To avoid having two separate python runtimes and a subset of scripts dependent on each, our image here builds python 3.9 from source, installs it as the system python, and then builds both the GDAL and Blender python modules with that python.
 
 ***WARNING:*** Building the container from scratch can take a long time. The blender source repos are sometimes very slow to clone for me and can take upwards of 45 min to get all of the code and libraries.
 

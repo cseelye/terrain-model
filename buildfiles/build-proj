@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+GDAL_VERSION=${GDAL_VERSION-3.3.2}
+CORES=${CORES-8}
+PROJ_INSTALL_PREFIX=${PROJ_INSTALL_PREFIX-/usr/local}
+GCC_ARCH=${GCC_ARCH-$(uname -m)}
+DEST_DIR=${GDAL_DEST-/build_gdal}
+
+# =============================================================================
+# Build PROJ
+mkdir proj
+curl -LSs https://github.com/OSGeo/PROJ/archive/master.tar.gz | tar xz -C proj --strip-components=1
+pushd proj
+CFLAGS='-DPROJ_RENAME_SYMBOLS -O2' CXXFLAGS='-DPROJ_RENAME_SYMBOLS -DPROJ_INTERNAL_CPP_NAMESPACE -O2' \
+    cmake . \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=${PROJ_INSTALL_PREFIX} \
+    -DBUILD_TESTING=OFF \
+
+make -j${CORES}
+make install DESTDIR="${DEST_DIR}"
+popd
+
+mkdir -p ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/share/proj
+curl -LOSsf http://download.osgeo.org/proj/proj-datumgrid-latest.zip
+unzip -q -j -u -o proj-datumgrid-latest.zip  -d ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/share/proj
+
+PROJ_SO=$(readlink -f ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libproj.so | awk 'BEGIN {FS="libproj.so."} {print $2}')
+PROJ_SO_FIRST=$(echo $PROJ_SO | awk 'BEGIN {FS="."} {print $1}')
+
+mv ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libproj.so.${PROJ_SO} ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libinternalproj.so.${PROJ_SO}
+ln -s libinternalproj.so.${PROJ_SO} ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libinternalproj.so.${PROJ_SO_FIRST}
+ln -s libinternalproj.so.${PROJ_SO} ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libinternalproj.so
+rm ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libproj.*
+ln -s libinternalproj.so.${PROJ_SO} ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libproj.so.${PROJ_SO_FIRST}
+${GCC_ARCH}-linux-gnu-strip -s ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib/libinternalproj.so.${PROJ_SO}
+for i in ${DEST_DIR}/${PROJ_INSTALL_PREFIX}/bin/*; do 
+    ${GCC_ARCH}-linux-gnu-strip -s $i 2>/dev/null || /bin/true;
+done

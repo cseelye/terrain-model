@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.8
+#!/usr/bin/env python3
 """Crop, convert, and draw a track onto an orthoimage"""
 
 from pathlib import Path

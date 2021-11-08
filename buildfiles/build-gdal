@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+GDAL_VERSION=${GDAL_VERSION-3.3.2}
+CORES=${CORES-8}
+PROJ_INSTALL_PREFIX=${PROJ_INSTALL_PREFIX-/usr/local}
+GCC_ARCH=${GCC_ARCH-$(uname -m)}
+DEST_DIR=${GDAL_DEST-/build_gdal}
+
+# build-proj must be run first with the same environment so that GDAL can find PROJ in ${DEST_DIR}/${PROJ_INSTALL_PREFIX}
+
+# =============================================================================
+# Build GDAL
+mkdir gdal
+curl -LSsf https://github.com/OSGeo/gdal/archive/v${GDAL_VERSION}.tar.gz | tar xz -C gdal --strip-components=1
+pushd gdal/gdal
+./autogen.sh
+LDFLAGS="-L/${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib -linternalproj" \
+    ./configure \
+        --prefix=/usr/local \
+        --sysconfdir=/etc \
+        --without-libtool \
+        --with-hide-internal-symbols \
+        --with-jpeg12 \
+        --with-python \
+        --with-webp \
+        --with-proj=/${DEST_DIR}/${PROJ_INSTALL_PREFIX} \
+        --with-libtiff=internal \
+        --with-rename-internal-libtiff-symbols \
+        --with-geotiff=internal \
+        --with-rename-internal-libgeotiff-symbols
+
+make -j${CORES}
+make install DESTDIR="${DEST_DIR}"
+popd
+
+# Strip binaries
+for f in "${DEST_DIR}"/usr/local/lib/*; do
+    ${GCC_ARCH}-linux-gnu-strip -s ${f} 2>/dev/null || /bin/true
+done
+for f in "${DEST_DIR}"/usr/local/bin/*; do 
+    ${GCC_ARCH}-linux-gnu-strip -s ${f} 2>/dev/null || /bin/true
+done
+for f in "${DEST_DIR}"/usr/local/lib/python*/site-packages/osgeo/*.so; do
+    ${GCC_ARCH}-linux-gnu-strip -s ${f} 2>/dev/null || /bin/true
+done
+
+# Move python libraries into the "system" python location
+mkdir --parent ${DEST_DIR}/usr/lib/
+mv ${DEST_DIR}/usr/local/lib/python* ${DEST_DIR}/usr/lib/

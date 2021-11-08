@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.9
+#!/usr/bin/env python3
 """Import x3d/stl into blender and make a nice model"""
 
 from math import degrees
