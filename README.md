@@ -36,7 +36,7 @@ docker container run --rm -it -v $(pwd):/work -w /work terrain-model
 ./download_elevation_data.py --gpx-file work/hitw.gpx \
                              --padding 0.2
 ```
-4. Create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the features more prominent. I find this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
+4. Create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the features more prominent - sometimes this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
 ```
 ./build_mesh.py --gpx-file work/hitw.gpx \
                  --padding 0.2 \

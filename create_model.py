@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.9
-"""Import x3d into blender and make a nice model"""
+"""Import x3d/stl into blender and make a nice model"""
 
 from math import degrees
 from pathlib import Path
@@ -296,7 +296,10 @@ def refine_model(model_file,
     # Resize the object
     dims = get_obj_dimensions(obj)
     log.info(f"Imported dimensions: ({dims})")
-    dim_scale = size / dims[0]
+    idx = 0
+    if dims[1] > dims[0]:
+        idx = 1
+    dim_scale = size / dims[idx]
     log.info(f"Scale factor = {dim_scale}")
     resize_obj(obj, dim_scale)
     dims = get_obj_dimensions(obj)
@@ -358,11 +361,11 @@ def refine_model(model_file,
     bpy.ops.wm.save_as_mainfile(filepath=str(output_path))
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Import x3d mesh and build a nice model")
+    parser = ArgumentParser(description="Import x3d/stl mesh and build a nice model")
     parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="x3d/stl file to import")
     parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Blender file to save")
     parser.add_argument("-t", "--min-thickness", type=float, metavar="INCHES", help="Minimum base thickness of the object")
-    parser.add_argument("-s", "--size", type=float, metavar="INCHES", help="Size of the long side of the object")
+    parser.add_argument("-s", "--size", type=float, metavar="INCHES", help="Size of the long side of the object, other dimensions will be scaled proportionally")
     args = parser.parse_args_to_dict()
 
     app = PythonApp(refine_model, args)
