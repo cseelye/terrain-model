@@ -1,8 +1,7 @@
 cache
 output
 tmp
-buildfiles/blender*
-buildfiles/gdal*
+container_build/blender*
 .DS_Store
 *.x3d
 *.dbf

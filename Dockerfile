@@ -141,7 +141,7 @@ RUN curl https://bootstrap.pypa.io/get-pip.py | python3 && \
     python3 -m pip --no-cache-dir install --upgrade numpy
 
 # Get the source and build PROJ and GDAL
-COPY buildfiles/build-proj buildfiles/build-gdal /
+COPY container_build/build-proj container_build/build-gdal /
 RUN /build-proj
 RUN /build-gdal
 
@@ -174,14 +174,14 @@ RUN apt-get update && \
 # To speed up debugging/iteration on the container image, checkout the blender
 # source in your build context and uncomment the COPY line to copy it into the
 # container instead of checking it out every time.
-#   mkdir -p buildfiles/blender-build/lib
-#   git clone --depth 1 --branch blender-v2.93-release --single-branch https://git.blender.org/blender.git buildfiles/blender-build/blender-src
-#   svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/tags/blender-2.93-release/lib/linux_centos7_x86_64 buildfiles/blender-build/lib/linux_centos7_x86_64
-#COPY buildfiles/ /
+#   mkdir -p container_build/blender-build/lib
+#   git clone --depth 1 --branch blender-v2.93-release --single-branch https://git.blender.org/blender.git container_build/blender-build/blender-src
+#   svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/tags/blender-2.93-release/lib/linux_centos7_x86_64 container_build/blender-build/lib/linux_centos7_x86_64
+#COPY container_build/ /
 
 # Get the blender source and build/install the bpy python module.
 # This creates a "user" install which is easy to copy from /root/.local
-COPY buildfiles/build-bpy /
+COPY container_build/build-bpy /
 RUN /build-bpy
 
 #
