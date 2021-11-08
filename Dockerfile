@@ -1,24 +1,4 @@
 ARG GDAL_VERSION=3.3.2
-
-
-FROM ubuntu:20.04 as gdal_build
-
-RUN printf '\
-APT::Install-Recommends "0";\n\
-APT::Install-Suggests "0";\n\
-' >> /etc/apt/apt.conf.d/01norecommends
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get udpate && \
-    apt-get install --yes \
-    g++-9-x86-64-linux-gnu
-
-
-
-
-
-
-
-
 # Build stage
 FROM osgeo/gdal:ubuntu-small-${GDAL_VERSION} as build
 ARG BLENDER_BRANCH="blender-v2.93-release"
