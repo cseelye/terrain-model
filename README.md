@@ -3,7 +3,7 @@ This tool will create a 3D model in Blender given a set of GPS coordinates. This
 
 I built this primarily to take a GPX route from a hike or four wheeling trip and create a full color, printable 3D model.
 <p align="center">
-<img src="blender_preview.png" alt="blender preview"/>  <img src="blender_preview2.png"  alt="blender preview2"/>
+<img src="example_blender1.png" alt="blender example 1"/>  <img src="example_blender2.png"  alt="blender example 2"/>
 </p>
 
 ## Workflow
@@ -31,6 +31,8 @@ docker container run --rm -it -v $(pwd):/work -w /work terrain-model
                    --max-width 2048 \
                    --output-file output/hitw.png
 ```
+<p align="center"><img src="example_image.png" alt="example image"/></p>
+
 3. Download the elevation data, using the same coordinates from the previous step.
 ```
 ./download_elevation_data.py --gpx-file work/hitw.gpx \
@@ -50,9 +52,13 @@ docker container run --rm -it -v $(pwd):/work -w /work terrain-model
                   --size 4.5 \
                   --output hitw.blend
 ```
+
 6. Open the model in blender, UV map the image onto it, export it and upload to [shapeways](https://www.shapeways.com) for printing.
+<p align="center"><img src="example_blender3.png" alt="example image"/></p>
 
 If you want to really customize the model, stop at step 4, import the stl into your choice of programs and build it out as you wish.
+<p align="center"><img src="example_mesh.png" alt="example image"/></p>
+
 
 ## Manually Downloading Images/Elevation Data
 Download orthoimages from [The National Map](https://apps.nationalmap.gov/downloader)  
