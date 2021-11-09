@@ -90,7 +90,7 @@ RUN curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTH
 FROM primordial AS base
 COPY --from=build_python /build_python3.9 /usr/
 RUN ldconfig
-
+RUN python3 -m ensurepip --default-pip --upgrade
 
 #
 # GDAL build stage
@@ -137,8 +137,7 @@ RUN apt-get install --yes \
         sqlite3
 
 # Install numpy so that gdal_array support gets built
-RUN curl https://bootstrap.pypa.io/get-pip.py | python3 && \
-    python3 -m pip --no-cache-dir install --upgrade numpy
+RUN python3 -m pip --no-cache-dir install --upgrade numpy
 
 # Get the source and build PROJ and GDAL
 COPY container_build/build-proj container_build/build-gdal /
@@ -192,8 +191,7 @@ FROM base AS build_py_modules
 # Install other python modules into python
 # This creates a "user" install which is easy to copy from /root/.local
 COPY requirements.txt /tmp/
-RUN curl https://bootstrap.pypa.io/get-pip.py | python3 && \
-    python3 -m pip --no-cache-dir install --upgrade --requirement=/tmp/requirements.txt --user && \
+RUN python3 -m pip --no-cache-dir install --upgrade --requirement=/tmp/requirements.txt --user && \
     rm --force /tmp/requirements.txt
 
 #
@@ -259,9 +257,7 @@ RUN apt-get update && \
         tree \
         vim \
         && \
-    apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/* && \
-    curl https://bootstrap.pypa.io/get-pip.py | python3
+    apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY requirements*.txt /tmp/
 RUN python3 -m pip install --no-cache-dir --upgrade --user --requirement /tmp/requirements-dev.txt && \
-    python3.9 -m pip install --no-cache-dir --upgrade --user --requirement /tmp/requirements-dev.txt && \
     rm --force /tmp/requirements*.txt
