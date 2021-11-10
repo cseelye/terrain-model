@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+NAME=terrain-model
+# Assuming targets int he Dockerfile are in order of dependency, iterate
+# through targets in reverse order to take advantage of docker parallel builds.
+for targ in $(perl -ne 'print "$2\n" if /^\s*(?:FROM|from)\s+(\S+)\s+(?:AS|as)\s+(\S+)/' Dockerfile | tac); do
+(
+    set -x
+    docker image build --target=${targ} --tag=${NAME}.${targ} .
+)
+done
+docker image build --target=prod --tag=${NAME} .
+docker image prune --force
