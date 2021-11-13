@@ -13,7 +13,7 @@ dev-container:
 # Build each target in the dockerfile and tag it as NAME.target
 .PHONY: tagged
 tagged:
-	container_build/make-tagged
+	time container_build/make-tagged
 
 .PHONY: run
 run: container
