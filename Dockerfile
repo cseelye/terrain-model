@@ -21,6 +21,9 @@ ARG PROJ_INSTALL_PREFIX=/usr/local
 ARG GDAL_DEST=/build_gdal
 ARG GCC_ARCH=x86_64
 
+# Add .local to the path for pip installed tools
+ENV PATH="${PATH}:/root/.local/bin"
+
 # Configure apt to never install recommended packages and do not prompt for user input
 RUN printf 'APT::Install-Recommends "0";\nAPT::Install-Suggests "0";\n' >> /etc/apt/apt.conf.d/01norecommends
 ENV DEBIAN_FRONTEND=noninteractive
