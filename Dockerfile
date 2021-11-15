@@ -19,6 +19,7 @@ ARG BLENDER_BRANCH
 ARG PYTHON_VERSION
 ARG PROJ_INSTALL_PREFIX=/usr/local
 ARG GDAL_DEST=/build_gdal
+ARG PYTHON_DEST=/build_python3
 ARG GCC_ARCH=x86_64
 
 # Add .local to the path for pip installed tools
@@ -82,24 +83,24 @@ RUN apt-get update && \
         libffi-dev
 RUN curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar -xz && \
     cd Python-${PYTHON_VERSION} && \
-    ./configure --enable-optimizations --prefix=/build_python3.9 && \
+    ./configure --enable-optimizations --prefix=${PYTHON_DEST} && \
     make -j${CORES} && \
     make install
-RUN /build_python3.9/bin/python3 -m ensurepip --upgrade --default-pip && \
-    /build_python3.9/bin/python3 -m pip install \
+RUN ${PYTHON_DEST}/bin/python3 -m ensurepip --upgrade --default-pip && \
+    ${PYTHON_DEST}/bin/python3 -m pip install \
         --no-cache-dir \
         --upgrade \
         --compile \
         pip wheel
-# Fix the shebangs for when we relocate this install
-RUN for f in $(find /build_python3.9/bin/ -type f -exec file {} \; | grep "Python script" | cut -d: -f1); do sed "s/build_python3.9/usr/" -i ${f}; done
+# Fix the shebangs for when we relocate this python install
+RUN for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python script" | cut -d: -f1); do sed "s|${PYTHON_DEST}|/usr|" -i ${f}; done
 
 #
 # Base stage
 # Shared layers all other stages share (primordial layers plus python runtime)
 #
 FROM primordial AS base
-COPY --from=build_python /build_python3.9 /usr/
+COPY --from=build_python ${PYTHON_DEST} /usr/
 RUN ldconfig
 
 #
