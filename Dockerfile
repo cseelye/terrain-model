@@ -44,7 +44,7 @@ RUN apt-get update && \
         ca-certificates \
         curl \
         gnupg \
-        libreadline8 \
+        libreadline5 \
         libncursesw6 \
         libssl1.1 \
         libsqlite3-0 \
@@ -85,6 +85,14 @@ RUN curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTH
     ./configure --enable-optimizations --prefix=/build_python3.9 && \
     make -j${CORES} && \
     make install
+RUN /build_python3.9/bin/python3 -m ensurepip --upgrade --default-pip && \
+    /build_python3.9/bin/python3 -m pip install \
+        --no-cache-dir \
+        --upgrade \
+        --compile \
+        pip wheel
+# Fix the shebangs for when we relocate this install
+RUN for f in $(find /build_python3.9/bin/ -type f -exec file {} \; | grep "Python script" | cut -d: -f1); do sed "s/build_python3.9/usr/" -i ${f}; done
 
 #
 # Base stage
@@ -93,7 +101,6 @@ RUN curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTH
 FROM primordial AS base
 COPY --from=build_python /build_python3.9 /usr/
 RUN ldconfig
-RUN python3 -m ensurepip --default-pip --upgrade
 
 #
 # GDAL build stage
@@ -140,7 +147,7 @@ RUN apt-get install --yes \
         sqlite3
 
 # Install numpy so that gdal_array support gets built
-RUN python3 -m pip --no-cache-dir install --upgrade numpy
+RUN pip3 install --no-cache-dir --upgrade numpy
 
 # Get the source and build PROJ and GDAL
 COPY container_build/build-proj container_build/build-gdal /
@@ -192,9 +199,17 @@ RUN /build-bpy
 FROM base AS build_py_modules
 
 # Install other python modules into python
-# This creates a "user" install which is easy to copy from /root/.local
+# This creates a "user" install which is easy to copy from /root/.local to other layers
+RUN apt-get update && \
+    apt-get install --yes build-essential python-dev
 COPY requirements.txt /tmp/
-RUN python3 -m pip --no-cache-dir install --upgrade --requirement=/tmp/requirements.txt --user && \
+RUN pip3 install \
+        --no-cache-dir \
+        --upgrade \
+        --compile \
+        --user \
+        --requirement=/tmp/requirements.txt \
+    && \
     rm --force /tmp/requirements.txt
 
 #
@@ -256,11 +271,17 @@ FROM prod AS dev
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install --yes \
+        build-essential \
         git \
         tree \
         vim \
         && \
     apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/*
 COPY requirements*.txt /tmp/
-RUN python3 -m pip install --no-cache-dir --upgrade --user --requirement /tmp/requirements-dev.txt && \
+RUN pip3 install \
+        --no-cache-dir \
+        --upgrade \
+        --compile \
+        --user \
+        --requirement=/tmp/requirements-dev.txt && \
     rm --force /tmp/requirements*.txt
