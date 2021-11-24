@@ -360,6 +360,9 @@ def refine_model(model_file,
     log.info(f"Saving {output_path}")
     bpy.ops.wm.save_as_mainfile(filepath=str(output_path))
 
+    log.passed(f"Successfully created model {output_file}")
+    return True
+
 if __name__ == '__main__':
     parser = ArgumentParser(description="Import x3d/stl mesh and build a nice model")
     parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="x3d/stl file to import")
