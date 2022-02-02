@@ -72,6 +72,8 @@ The image build is complex because of the way GDAL and Blender work. GDAL doesn'
 
 ***WARNING:*** Building the container from scratch can take a long time. The blender source repos are sometimes very slow to clone for me and can take upwards of 45 min to get all of the code and libraries.
 
+<p align="center"><img src="terrain-model-container.png" alt="container diagram"/></p>
+
 ## Development
 If you are hacking on the scripts, you probably want to use the dev target in the Dockerfile:
 ```
