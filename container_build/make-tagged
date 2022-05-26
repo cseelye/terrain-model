@@ -1,14 +1,69 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAME=terrain-model
-# Assuming targets int he Dockerfile are in order of dependency, iterate
-# through targets in reverse order to take advantage of docker parallel builds.
-for targ in $(perl -ne 'print "$2\n" if /^\s*(?:FROM|from)\s+(\S+)\s+(?:AS|as)\s+(\S+)/' Dockerfile | tac); do
+NAME=${NAME:-terrain-model}
+REPO=${REPO-ghcr.io/cseelye} # Allow this to be empty
+if [[ -n ${REPO} ]]; then
+    IMAGE_NAME=${REPO}/${NAME}
+else
+    IMAGE_NAME=${NAME}
+fi
+USE_BUILDX=${USE_BUILDX-0}
+if [[ ${USE_BUILDX} -eq 1 ]]; then
+    DOCKER_COMMAND="buildx"
+else
+    DOCKER_COMMAND="image"
+fi
+
+for stage in base build_gdal build_blender build_py_modules; do
+    ( set -x; docker image pull ${IMAGE_NAME}.${stage} ) || true
+done
+if docker image pull ${IMAGE_NAME}; then
+    docker image tag ${IMAGE_NAME} ${IMAGE_NAME}.prod
+else
+    true
+fi
+
+(
+set -x
+docker ${DOCKER_COMMAND} build \
+    --cache-from ${IMAGE_NAME}.base \
+    --cache-from ${IMAGE_NAME}.build_gdal \
+    --cache-from ${IMAGE_NAME}.build_blender \
+    --cache-from ${IMAGE_NAME}.build_py_modules \
+    --progress plain \
+    --target prod \
+    --tag ${IMAGE_NAME}.prod \
+    .
+)
+
+(
+set -x
+docker ${DOCKER_COMMAND} build \
+    --cache-from ${IMAGE_NAME}.base \
+    --cache-from ${IMAGE_NAME}.build_gdal \
+    --cache-from ${IMAGE_NAME}.build_blender \
+    --cache-from ${IMAGE_NAME}.build_py_modules \
+    --progress plain \
+    --target dev \
+    --tag ${IMAGE_NAME}.dev \
+    .
+)
+
+# Explicitly tag the intermediate layers
+for stage in base build_gdal build_blender build_py_modules; do
 (
     set -x
-    docker image build --target=${targ} --tag=${NAME}.${targ} .
+    docker ${DOCKER_COMMAND} build \
+        --cache-from ${IMAGE_NAME}.base \
+        --cache-from ${IMAGE_NAME}.build_gdal \
+        --cache-from ${IMAGE_NAME}.build_blender \
+        --cache-from ${IMAGE_NAME}.build_py_modules \
+        --cache-from ${IMAGE_NAME}.prod \
+        --progress plain \
+        --target ${stage} \
+        --tag ${IMAGE_NAME}.${stage} \
+        .
 )
 done
-docker image build --target=prod --tag=${NAME} .
-docker image prune --force
+docker image tag ${IMAGE_NAME}.prod ${IMAGE_NAME}

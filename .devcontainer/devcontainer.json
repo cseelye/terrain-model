@@ -1,14 +1,8 @@
 {
 	"name": "terrain-model dev container",
-	"context": "..",
-	"build": {
-		"target": "dev"
-	},
-	"dockerFile": "../Dockerfile",
-	"settings": { 
-		"terminal.integrated.shell.linux": null
-	},
+	"image": "ghcr.io/cseelye/terrain-model.dev",
 	"extensions": [
-		"ms-python.python"
+		"ms-python.python",
+		"cseelye.vscode-allofthem"
 	]
 }

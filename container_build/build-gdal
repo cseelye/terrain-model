@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 set -x
-GDAL_VERSION=${GDAL_VERSION-3.3.2}
+GDAL_VERSION=${GDAL_VERSION-3.5.0}
 CORES=${CORES-8}
 PROJ_INSTALL_PREFIX=${PROJ_INSTALL_PREFIX-/usr/local}
 GCC_ARCH=${GCC_ARCH-$(uname -m)}
@@ -13,7 +13,7 @@ DEST_DIR=${GDAL_DEST-/build_gdal}
 # Build GDAL
 mkdir gdal
 curl -LSsf https://github.com/OSGeo/gdal/archive/v${GDAL_VERSION}.tar.gz | tar xz -C gdal --strip-components=1
-pushd gdal/gdal
+pushd gdal
 ./autogen.sh
 LDFLAGS="-L/${DEST_DIR}/${PROJ_INSTALL_PREFIX}/lib -linternalproj" \
     ./configure \

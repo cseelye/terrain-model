@@ -1,5 +1,6 @@
 SHELL := /bin/bash
-NAME = terrain-model
+NAME := terrain-model
+REPO := ghcr.io/cseelye
 
 .DEFAULT_GOAL: container
 .PHONY: container
@@ -13,7 +14,10 @@ dev-container:
 # Build each target in the dockerfile and tag it as NAME.target
 .PHONY: tagged
 tagged:
-	time container_build/make-tagged
+	export NAME=$(NAME); export REPO=$(REPO); time container_build/make-tagged
+.PHONY: push
+push:
+	export NAME=$(NAME); export REPO=$(REPO); container_build/make-push
 
 .PHONY: run
 run: container

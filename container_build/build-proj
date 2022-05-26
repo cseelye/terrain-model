@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-set -x
-GDAL_VERSION=${GDAL_VERSION-3.3.2}
+
 CORES=${CORES-8}
 PROJ_INSTALL_PREFIX=${PROJ_INSTALL_PREFIX-/usr/local}
 GCC_ARCH=${GCC_ARCH-$(uname -m)}

@@ -1,5 +1,7 @@
 work*
 output
 tmp
+cache
 *.pyc
 .DS_Store
+

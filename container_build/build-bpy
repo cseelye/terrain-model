@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BLENDER_BRANCH=${BLENDER_BRANCH-"blender-v2.93-release"}
-CORES=${CORES-8}
-WORK_DIR=${BLENDER_WORK_DIR-/blender-build}
+export BLENDER_BRANCH=${BLENDER_BRANCH-"blender-v3.1-release"}
+export BLENDER_LIB_BRANCH=${BLENDER_LIB_BRANCH-"$(echo ${BLENDER_BRANCH} | tr -d v)"}
+export CORES=${CORES-8}
+export WORK_DIR=${BLENDER_WORK_DIR-/blender-build}
+export
 
 # Get the blender source
 # The blender repos can be very slow sometimes and disconnect during cloning, so wrap the commands in a loop to keep trying
-# If the directories already exist, assume someone clones the repos ahead of time and just reuse them
+# If the directories already exist, assume someone cloned the repos ahead of time and just reuse them
 if [[ ! -e ${WORK_DIR}/lib ]]; then
     mkdir -p ${WORK_DIR}/lib
     pushd ${WORK_DIR}/lib
@@ -16,19 +18,25 @@ if [[ ! -e ${WORK_DIR}/lib ]]; then
         svn cleanup
         popd
     fi
-    time until svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/trunk/lib/linux_centos7_x86_64; do
+    attempt=1
+    time until svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/tags/${BLENDER_LIB_BRANCH}/lib/linux_centos7_x86_64; do
         pushd ${WORK_DIR}/lib/linux_centos7_x86_64
         svn cleanup
         popd
+        ((attempt++))
+        # Sleep with exponential backoff and jitter
+        sleep $(python3 -c "import random; print(random.uniform(10, min(240, 10 * 2 ** ${attempt})))")
     done
     popd
 fi
+echo "libs branch: $(svn info --show-item url ${WORK_DIR}/lib/linux_centos7_x86_64)"
 
 if [[ ! -e ${WORK_DIR}/blender-src ]]; then
-    time until git clone --depth 1 --branch blender-v2.93-release --single-branch https://git.blender.org/blender.git ${WORK_DIR}/blender-src; do
+    time until git clone --depth 1 --branch ${BLENDER_BRANCH} --single-branch https://git.blender.org/blender.git ${WORK_DIR}/blender-src; do
         rm -rf ${WORK_DIR}/blender-src
     done
 fi
+echo "source branch: $(git -C ${WORK_DIR}/blender-src rev-parse --abbrev-ref HEAD)"
 
 # Build blender python library
 pushd ${WORK_DIR}/blender-src
