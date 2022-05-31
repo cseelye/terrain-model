@@ -147,6 +147,40 @@ def flatten_bottom(obj):
             for v in face.verts:
                 v.co = v.co[0], v.co.y, min_z
 
+def extrude_and_flatten(obj, min_thickness):
+    extrude_amount = min_thickness / METER_TO_INCH
+    with ModeSet("EDIT"):
+        bpy.ops.mesh.extrude_region_move(MESH_OT_extrude_region={"use_normal_flip":False,
+                                                                 "use_dissolve_ortho_edges":False,
+                                                                 "mirror":False},
+                                         TRANSFORM_OT_translate={"value":(-0, -0, extrude_amount),
+                                                                 "orient_type":'GLOBAL',
+                                                                 "orient_matrix":((1, 0, 0), (0, 1, 0), (0, 0, 1)),
+                                                                 "orient_matrix_type":'GLOBAL',
+                                                                 "constraint_axis":(False, False, True),
+                                                                 "mirror":False,
+                                                                 "use_proportional_edit":False,
+                                                                 "proportional_edit_falloff":'SMOOTH',
+                                                                 "proportional_size":1,
+                                                                 "use_proportional_connected":False,
+                                                                 "use_proportional_projected":False,
+                                                                 "snap":False,
+                                                                 "snap_target":'CLOSEST',
+                                                                 "snap_point":(0, 0, 0),
+                                                                 "snap_align":False,
+                                                                 "snap_normal":(0, 0, 0),
+                                                                 "gpencil_strokes":False,
+                                                                 "cursor_transform":False,
+                                                                 "texture_space":False,
+                                                                 "remove_on_cancel":False,
+                                                                 "release_confirm":False,
+                                                                 "use_accurate":False,
+                                                                 "use_automerge_and_split":False})
+        bpy.ops.mesh.select_all(action='DESELECT')
+    bpy.ops.object.select_all(action='DESELECT')
+
+    flatten_bottom(obj)
+
 def get_bounding_box(obj):
     with ModeSet("EDIT"):
         min_x = max_x = min_y = max_y = min_z = max_z = None
@@ -245,3 +279,74 @@ def simplify_faces(obj):
                         bpy.ops.mesh.dissolve_edges()
                         face_count = 0
                         break
+
+def get_view3d_area_region(screen):
+    for area in screen.areas:
+        if area.type == "VIEW_3D":
+            for region in area.regions:
+                if region.type == "WINDOW":
+                    return area, region
+
+def set_top_view(screen):
+    area, region = get_view3d_area_region(screen)
+    override = bpy.context.copy()
+    override['area'] = area
+    override['region'] = region
+    bpy.ops.view3d.view_axis(override, type='TOP')
+
+def set_zoomed_view(screen):
+    select_obj()
+    area, region = get_view3d_area_region(screen)
+    override = bpy.context.copy()
+    override['area'] = area
+    override['region'] = region
+    # bpy.ops.view3d.select_box(override, xmin=0,xmax=area.width,ymin=0,ymax=area.height,mode='ADD')
+    bpy.ops.view3d.view_selected(override, use_all_regions=False)
+        # for obj in bpy.data.objects:
+        #     obj.select_set(False)
+
+def set_rendered_view(screen):
+    area, region = get_view3d_area_region(screen)
+    override = bpy.context.copy()
+    override['area'] = area
+    override['region'] = region
+    bpy.ops.view3d.toggle_shading(override, type='RENDERED')
+
+def project_uv(screen):
+    area, region = get_view3d_area_region(screen)
+    space = area.spaces[0]
+
+    # override = bpy.context.copy()
+    override = {}
+    override['window'] = bpy.context.window
+    override['screen'] = screen
+    override['area'] = area
+    override['region'] = region
+    override['scene'] = bpy.context.scene
+    override['space'] = space
+    # Make sure we are in orthographic view
+    if space.region_3d.view_perspective != "ORTHO":
+        bpy.ops.view3d.view_persportho(override)
+
+    # Select all
+    bpy.ops.object.mode_set(override, mode='EDIT')
+    bpy.ops.mesh.select_all(override, action='SELECT')
+
+    # Update view
+    space.region_3d.update()
+
+    # Create projection
+    bpy.ops.uv.project_from_view(override,
+                                    orthographic=False,
+                                    camera_bounds=True,
+                                    correct_aspect=True,
+                                    clip_to_bounds=False,
+                                    scale_to_bounds=True)
+
+def deselect_all(screen):
+    area, region = get_view3d_area_region(screen)
+    override = {}#bpy.context.copy()
+    override['area'] = area
+    override['region'] = region
+    with ModeSet("OBJECT"):
+        bpy.ops.object.select_all(override, action='DESELECT')

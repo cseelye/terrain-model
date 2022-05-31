@@ -1,43 +1,45 @@
 #!/usr/bin/env python3
 """Import x3d/stl into blender and make a nice model"""
 
-from math import degrees
 from pathlib import Path
+import sys
 
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, StrType
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import ApplicationError
+from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
 import bpy
-import bmesh
-from mathutils import Vector
+from mathutils import Vector #type: ignore #pylint: disable=import-error
 
-from blender_util import METER_TO_INCH, ModeSet, select_obj, get_obj_dimensions, resize_obj, flatten_bottom, simplify_faces
+from blender_util import extrude_and_flatten, select_obj, get_obj_dimensions, resize_obj, simplify_faces
 
 @logargs
 @ValidateAndDefault({
     # "arg_name" : (arg_type, arg_default)
-    "model_file": (StrType(), None),
+    "mesh_file": (StrType(), None),
     "output_file": (StrType(), None),
     "min_thickness": (float, 0.125),
     "size": (float, None),
 })
-def refine_model(model_file,
+def refine_model(mesh_file,
 			     output_file,
                  min_thickness,
                  size,
 ):
     log = GetLogger()
-    import_path = Path(model_file).absolute()  # blender crashes with relative paths so make sure they are absolute
-    output_path = Path(output_file).absolute()
+    import_path = Path(mesh_file).absolute().resolve()  # blender sometimes crashes with relative paths so make sure they are absolute
+    output_path = Path(output_file).absolute().resolve()
 
-	# Delete default object
+    if not import_path.exists():
+        raise InvalidArgumentError("Mesh file does not exist")
+
+    # Delete default object
     log.info("Cleaning workspace")
-    # with ModeSet("OBJECT"):
-    #     for obj in bpy.context.scene.objects:
-    #         if obj.type == "MESH":
-    #             obj.select_set(True)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for obj in bpy.context.scene.objects:
+        if obj.type == "MESH":
+            obj.select_set(True)
     bpy.ops.object.delete()
 
     # Set the display units to inches
@@ -69,41 +71,9 @@ def refine_model(model_file,
     log.info(f"Resized dimensions: {dims}")
 
     # Add thickness
-    log.info("Extruding")
+    log.info("Extruding and flattening bottom")
     obj = select_obj()
-    with ModeSet("EDIT"):
-        bpy.ops.mesh.extrude_region_move(MESH_OT_extrude_region={"use_normal_flip":False,
-                                                                 "use_dissolve_ortho_edges":False,
-                                                                 "mirror":False},
-                                         TRANSFORM_OT_translate={"value":(-0, -0, min_thickness / METER_TO_INCH),
-                                                                 "orient_type":'GLOBAL',
-                                                                 "orient_matrix":((1, 0, 0), (0, 1, 0), (0, 0, 1)),
-                                                                 "orient_matrix_type":'GLOBAL',
-                                                                 "constraint_axis":(False, False, True),
-                                                                 "mirror":False,
-                                                                 "use_proportional_edit":False,
-                                                                 "proportional_edit_falloff":'SMOOTH',
-                                                                 "proportional_size":1,
-                                                                 "use_proportional_connected":False,
-                                                                 "use_proportional_projected":False,
-                                                                 "snap":False,
-                                                                 "snap_target":'CLOSEST',
-                                                                 "snap_point":(0, 0, 0),
-                                                                 "snap_align":False,
-                                                                 "snap_normal":(0, 0, 0),
-                                                                 "gpencil_strokes":False,
-                                                                 "cursor_transform":False,
-                                                                 "texture_space":False,
-                                                                 "remove_on_cancel":False,
-                                                                 "release_confirm":False,
-                                                                 "use_accurate":False,
-                                                                 "use_automerge_and_split":False})
-        bpy.ops.mesh.select_all(action='DESELECT')
-    bpy.ops.object.select_all(action='DESELECT')
-
-    # Flatten the bottom
-    log.info("Flattening")
-    flatten_bottom(obj)
+    extrude_and_flatten(obj, min_thickness)
 
     # Make the sides of the model a single face each
     simplify_faces(obj)
@@ -119,20 +89,29 @@ def refine_model(model_file,
             lowest_z = v_world[2]
     obj.location.z = obj.location.z - lowest_z
 
-
     log.info(f"Saving {output_path}")
     bpy.ops.wm.save_as_mainfile(filepath=str(output_path))
 
     log.passed(f"Successfully created model {output_file}")
     return True
 
+
+def filter_args(argv):
+    if not argv:
+        return []
+    # If this is being invoked inside blender, filter out the blender args and return the rest
+    if argv[0].endswith("lender") and "--" in argv:
+        return argv[argv.index("--") + 1:]
+    return argv[1:]
+
 if __name__ == '__main__':
     parser = ArgumentParser(description="Import x3d/stl mesh and build a nice model")
-    parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="x3d/stl file to import")
+    parser.add_argument("-m", "--mesh-file", type=StrType(), metavar="FILENAME", help="x3d/stl file to import")
     parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Blender file to save")
     parser.add_argument("-t", "--min-thickness", type=float, metavar="INCHES", help="Minimum base thickness of the object")
     parser.add_argument("-s", "--size", type=float, metavar="INCHES", help="Size of the long side of the object, other dimensions will be scaled proportionally")
-    args = parser.parse_args_to_dict()
+
+    args = parser.parse_args_to_dict(filter_args(sys.argv))
 
     app = PythonApp(refine_model, args)
     app.Run(**args)
