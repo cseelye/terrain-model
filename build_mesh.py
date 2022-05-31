@@ -9,7 +9,7 @@ from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, B
 from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
 
-from geo import GPXFile, dem_to_model2, get_cropped_elevation_filename
+from geo import GPXFile, dem_to_model2, get_cropped_elevation_filename, get_dem_data
 
 @logargs
 @ValidateAndDefault({
@@ -71,12 +71,13 @@ def build_mesh(gpx_file,
             raise InvalidArgumentError("DEM file does not exist")
         input_file = dem_filename
     else:
+        # Look in cache for data, or download if we can't find it
         cache_dir = Path(cache_dir)
         dem_filename = Path(get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long))
         input_file = cache_dir / dem_filename
-        log.debug(f"Looking for elevation data {input_file}")
+        log.debug(f"Looking for cached elevation data {input_file}")
         if not (input_file).exists():
-            raise ApplicationError("Could not find elevation data")
+            get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir)
 
     # Create the mesh from the elevation data
     log.info("Creating 3D mesh from elevation data")

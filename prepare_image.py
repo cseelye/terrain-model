@@ -15,7 +15,7 @@ from pyapputil.shellutil import Shell
 from osgeo import gdal, osr
 import numpy as np
 
-from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, GDAL_ERROR, get_cropped_image_filename
+from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, GDAL_ERROR, get_cropped_image_filename, get_image_data
 from util import Color
 
 @logargs
@@ -91,20 +91,23 @@ def main(gpx_file,
         raise InvalidArgumentError("You must specify an area to crop")
     log.debug(f"Requested crop boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
+    # If there was no input file specified, first look in the local cache and then try to download appropriate files
     cache_dir = Path(cache_dir)
     if not input_files:
-        cache_file = cache_dir / get_cropped_image_filename(max_lat, min_long, min_lat, max_long)
-        if not cache_file.exists():
-            log.error("Could not find image data in cache")
-            return False
-        input_files = [cache_file]
+        image_file = get_cropped_image_filename(max_lat, min_long, min_lat, max_long)
+        cache_file = cache_dir / image_file
+        if cache_file.exists():
+            input_files = [cache_file]
+        else:
+            get_image_data(image_file, min_lat, min_long, max_lat, max_long, cache_dir)
+            input_files = [cache_file]
 
     # Build a virtual data set if there is more than one input file
     if len(input_files) > 1:
         log.info("Merging input files into virtual data set")
         _, input_file = tempfile.mkstemp()
         # The python interface to this is horrifying, so use the command line app
-        retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(input_file, " ".join(input_files)))
+        retcode, _, stderr = Shell(f"gdalbuildvrt {input_file} {' '.join(input_files)}")
         if retcode != 0 or "ERROR" in stderr:
             raise ApplicationError(f"Could not merge input files: {stderr}")
     else:
