@@ -1,7 +1,10 @@
 #pylint: disable=unidiomatic-typecheck,protected-access,global-statement
 """Helper functions for terrain-model scripts"""
+try:
+    import collections.abc as collections
+except ImportError:
+    import collections
 
-import collections
 from time import time
 
 from pyapputil.logutil import GetLogger
@@ -29,6 +32,10 @@ def download_file(url, local_file):
         with open(local_file, "wb") as output:
             for chunk in req.iter_content(chunk_size=16 * 1024):
                 output.write(chunk)
+
+def list_like(thing):
+    """Check of the argument is an iterable but not a string"""
+    return isinstance(thing, collections.Iterable) and not isinstance(thing, str)
 
 class Color:
     """A named or RBG color"""
@@ -133,8 +140,8 @@ class ProgressTracker:
             return
         if current >= 100 and self.last_display_pct <= 100:
             self.logger.info(f"   {current}% ({int(elapsed_time)} sec elapsed)")
-        elif current >= self.last_display_pct + self.display_pct_interval or \
-             now - self.last_display_time > self.display_time_interval:
+        elif time_left > 0 and (current >= self.last_display_pct + self.display_pct_interval or \
+             now - self.last_display_time > self.display_time_interval):
             self.logger.info(f"    {current}% - {time_left} sec remaining")
             self.last_display_pct = current
             self.last_display_time = now

@@ -9,8 +9,10 @@ from urllib.parse import urlparse
 import zipfile
 
 from affine import Affine
+import affine
 from dateutil.parser import isoparse
 from lxml import etree as ET
+import numpy
 from osgeo import gdal, osr
 from pyapputil.logutil import GetLogger
 from pyapputil.exceptutil import ApplicationError
@@ -19,7 +21,7 @@ import requests
 
 from gtm1.geotrimesh import mesh
 from gtm2.generate_terrain import generate_terrain as gtm2_generate_terrain
-from util import download_file
+from util import download_file, list_like
 
 
 # Make GDAL throw exceptions for Failure/Fatal messages
@@ -266,6 +268,244 @@ def degree_lat_to_miles(lat):
     rads = lat * 2 * math.pi / 360
     return (WGS84.m1 + WGS84.m2 * math.cos(2*rads) + WGS84.m3 * math.cos(4*rads) + WGS84.m4 * math.cos(6*rads)) * 0.000621371
 
+def raster_stats(data_source):
+    log = GetLogger()
+
+    wgs84 = osr.SpatialReference()
+    wgs84.SetFromUserInput('WGS84')
+    wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+
+    # Open the image source and get the transforms
+    src_sr = osr.SpatialReference()
+    src_sr.ImportFromWkt(data_source.GetProjection())
+    src_sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    gps_to_raster = osr.CoordinateTransformation(wgs84, src_sr)
+    raster_to_gps = osr.CoordinateTransformation(src_sr, wgs84)
+    gt = data_source.GetGeoTransform()
+    fwd_trans = Affine.from_gdal(*gt)
+    rev_trans = ~fwd_trans
+
+    # Calculate the size of one pixel in the image source
+    i_orig_x, i_orig_y = fwd_trans * (0, 0)
+    i_plus1_x, i_plus1_y = fwd_trans * (1, 1)
+    plus1_long, plus1_lat, _ = raster_to_gps.TransformPoint(i_plus1_x, i_plus1_y)
+    orig_long, orig_lat, _ = raster_to_gps.TransformPoint(i_orig_x, i_orig_y)
+    gx_size = plus1_long - orig_long
+    gy_size = plus1_lat - orig_lat
+    long_feet = degree_long_to_miles(orig_lat) * 5280
+    lat_feet = degree_long_to_miles(orig_lat) * 5280
+    px_size = long_feet * (plus1_long - orig_long)
+    py_size = lat_feet * (plus1_lat - orig_lat)
+    log.info(f"  Origin(UL) = {orig_long, orig_lat}")
+    log.info(f"  Raster size = {data_source.RasterXSize, data_source.RasterYSize}")
+    log.info(f"  One pixel degrees = {gx_size, gy_size}")
+    log.info(f"  One pixel feet = {px_size, py_size}")
+
+    i_max_x, i_max_y = fwd_trans * (data_source.RasterXSize, data_source.RasterYSize)
+    max_long, min_lat, _ = raster_to_gps.TransformPoint(i_max_x, i_max_y)
+    min_long, max_lat, _ = raster_to_gps.TransformPoint(i_orig_x, i_orig_y)
+    log.info(f"  alt origin = {min_long, max_lat}")
+    log.info(f"  alt max = {max_long, min_lat}")
+
+    # Calculate image/pixel coordinates for the requested crop
+    uli_x, uli_y, _ = gps_to_raster.TransformPoint(min_long, max_lat)
+    ulp_x, ulp_y = rev_trans * (uli_x, uli_y)
+
+    lri_x, lri_y, _ = gps_to_raster.TransformPoint(max_long, min_lat)
+    lrp_x, lrp_y = rev_trans * (lri_x, lri_y)
+
+
+    gx_size = (max_long - min_long) / float(data_source.RasterXSize)
+    gy_size = (max_lat - min_lat) / float(data_source.RasterYSize)
+    log.info(f"  alt degree size = {max_long - min_long}")
+    log.info(f"  alt one pixel degrees = {gx_size, gy_size}")
+
+    px_per_deg = float(data_source.RasterXSize) / (max_long - min_long)
+    log.info(f"  px per degree = {px_per_deg}")
+    px_per_deg = float(data_source.RasterYSize) / (max_lat - min_lat)
+    log.info(f"  px per degree = {px_per_deg}")
+
+    return {k: v for k,v in locals().items() if not k.startswith("_")}
+
+
+def align_image_elevation(min_lat, min_long, max_lat, max_long, cache_dir=Path("cache")):
+    """
+    Compute the nearest GPS coordinates that align to the pixels in the supplied image and elevation rasters.
+    This allows the final output model and image to better align
+    """
+    log = GetLogger()
+
+    # Make a list of image tiles we need to cover this region and download them
+    tile_coords = get_image_tile_range(min_lat, min_long, max_lat, max_long)
+    image_files = []
+    for lat, long in tile_coords:
+        tile_file = download_image_tile(lat, long, cache_dir)
+        image_files.append(tile_file)
+    # Create a virtual data source with all of the tiles
+    file_list = " ".join(str(f) for f in image_files)
+    log.debug(f"Creating virtual data set with tiles [{file_list}]")
+    _, image_input_file = tempfile.mkstemp()
+    retcode, _, stderr = Shell(f"gdalbuildvrt {image_input_file} {file_list}")
+    if retcode != 0 or "ERROR" in stderr:
+        raise ApplicationError(f"Could not merge input files: {stderr}")
+
+    # Make a list of elevation tiles we need to cover this region and download them
+    tile_coords = get_elevation_tile_range(min_lat, min_long, max_lat, max_long)
+    elevation_files = []
+    for lat, long in tile_coords:
+        tile_file = download_elevation_tile(lat, long, cache_dir)
+        elevation_files.append(tile_file)
+    # Create a virtual data source with all of the tiles
+    file_list = " ".join(str(f) for f in elevation_files)
+    log.debug(f"Creating virtual data set with tiles [{file_list}]")
+    _, elevation_input_file = tempfile.mkstemp()
+    retcode, _, stderr = Shell(f"gdalbuildvrt {elevation_input_file} {file_list}")
+    if retcode != 0 or "ERROR" in stderr:
+        raise ApplicationError(f"Could not merge input files: {stderr}")
+
+    wgs84 = osr.SpatialReference()
+    wgs84.SetFromUserInput('WGS84')
+    wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+
+    # Open the image source and get the transforms
+    img_src_ds = gdal.Open(str(image_input_file))
+    GDAL_ERROR.check("Error parsing input file", img_src_ds)
+    img_src_sr = osr.SpatialReference()
+    img_src_sr.ImportFromWkt(img_src_ds.GetProjection())
+    img_src_sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    img_gps_to_raster = osr.CoordinateTransformation(wgs84, img_src_sr)
+    img_raster_to_gps = osr.CoordinateTransformation(img_src_sr, wgs84)
+    img_gt = img_src_ds.GetGeoTransform()
+    img_fwd_trans = Affine.from_gdal(*img_gt)
+    img_rev_trans = ~img_fwd_trans
+
+    log.info("Source image data")
+    img_stats = raster_stats(img_src_ds)
+
+    # Open the elevation source and get the transforms
+    dem_src_ds = gdal.Open(str(elevation_input_file))
+    GDAL_ERROR.check("Error parsing input file", dem_src_ds)
+    dem_src_sr = osr.SpatialReference()
+    dem_src_sr.ImportFromWkt(dem_src_ds.GetProjection())
+    dem_src_sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    dem_gps_to_raster = osr.CoordinateTransformation(wgs84, dem_src_sr)
+    dem_raster_to_gps = osr.CoordinateTransformation(dem_src_sr, wgs84)
+    dem_gt = dem_src_ds.GetGeoTransform()
+    dem_fwd_trans = Affine.from_gdal(*dem_gt)
+    dem_rev_trans = ~dem_fwd_trans
+
+    log.info("Source elevation data")
+    dem_stats = raster_stats(dem_src_ds)
+
+    img_deg_per_pixel_lat = img_stats["gy_size"]
+    img_deg_per_pixel_long = img_stats["gx_size"]
+
+    dem_deg_per_pixel_lat = dem_stats["gy_size"]
+    dem_deg_per_pixel_long = dem_stats["gx_size"]
+
+    if img_deg_per_pixel_lat > dem_deg_per_pixel_lat:
+        # find the closest pixel in the image, then find corresponding in the dem
+        pass
+    else:
+        # Find the closest pixel in the DEM that completely covers the area N-S
+        log.info("Adjusting N-S boundaries")
+        log.info(f"  min_long, max_lat = {min_long, max_lat}")
+        log.info(f"  min_long, min_lat = {min_long, min_lat}")
+        dem_uli_x, dem_uli_y, _ = dem_gps_to_raster.TransformPoint(min_long, max_lat)
+        dem_ulp_x, dem_ulp_y = dem_rev_trans * (dem_uli_x, dem_uli_y)
+        dem_lli_x, dem_lli_y, _ = dem_gps_to_raster.TransformPoint(min_long, min_lat)
+        dem_llp_x, dem_llp_y = dem_rev_trans * (dem_lli_x, dem_lli_y)
+        dem_ulp_y = math.floor(dem_ulp_y)
+        dem_llp_y = math.ceil(dem_llp_y)
+        log.info(f"  dem_ulp_y, dem_llp_y = {dem_ulp_y, dem_llp_y}")
+        # Translate back to GPS coords
+        adj_dem_lli_x, adj_dem_lli_y = dem_fwd_trans * (dem_llp_x, dem_llp_y)
+        _, adj_min_lat, _ = dem_raster_to_gps.TransformPoint(adj_dem_lli_x, adj_dem_lli_y)
+        log.info(f"  org_min_lat = {min_lat}")
+        log.info(f"  adj_min_lat = {adj_min_lat}")
+        adj_dem_uli_x, adj_dem_uli_y = dem_fwd_trans * (dem_ulp_x, dem_ulp_y)
+        _, adj_max_lat, _ = dem_raster_to_gps.TransformPoint(adj_dem_uli_x, adj_dem_uli_y)
+        log.info(f"  org_max_lat = {max_lat}")
+        log.info(f"  adj_max_lat = {adj_max_lat}")
+
+        # Find the closest pixel in the DEM that completely covers the area E-W
+        log.info("Adjusting E-W boundaries")
+        log.info(f"  max_long, min_lat = {max_long, min_lat}")
+        log.info(f"  min_long, min_lat = {max_long, min_lat}")
+        dem_lri_x, dem_lri_y, _ = dem_gps_to_raster.TransformPoint(max_long, adj_min_lat)
+        dem_lrp_x, dem_lrp_y = dem_rev_trans * (dem_lri_x, dem_lri_y)
+        dem_lli_x, dem_lli_y, _ = dem_gps_to_raster.TransformPoint(min_long, adj_min_lat)
+        dem_llp_x, dem_llp_y = dem_rev_trans * (dem_lli_x, dem_lli_y)
+        log.info(f"  dem_llp_x, dem_lrp_x = {dem_llp_x, dem_lrp_x}")
+        dem_llp_x = math.floor(dem_llp_x)
+        dem_lrp_x = math.ceil(dem_lrp_x)
+        log.info(f"  dem_llp_x, dem_lrp_x = {dem_llp_x, dem_lrp_x}")
+        # Translate back to GPS coords
+        adj_dem_lli_x, adj_dem_lli_y = dem_fwd_trans * (dem_llp_x, dem_llp_y)
+        adj_min_long, _, _ = dem_raster_to_gps.TransformPoint(adj_dem_lli_x, adj_dem_lli_y)
+        log.info(f"  org_min_long = {min_long}")
+        log.info(f"  adj_min_long = {adj_min_long}")
+        adj_dem_lri_x, adj_dem_lri_y = dem_fwd_trans * (dem_lrp_x, dem_lrp_y)
+        adj_max_long, _, _ = dem_raster_to_gps.TransformPoint(adj_dem_lri_x, adj_dem_lri_y)
+        log.info(f"  org_max_long = {max_long}")
+        log.info(f"  adj_max_long = {adj_max_long}")
+
+        adj_max_lat = round(adj_max_lat, 7)
+        adj_min_lat = round(adj_min_lat, 7)
+        adj_max_long = round(adj_max_long, 7)
+        adj_min_long = round(adj_min_long, 7)
+        log.info("New coordinates:")
+        log.info(f"  -n {adj_max_lat} -w {adj_min_long} -s {adj_min_lat} -e {adj_max_long}")
+
+
+def get_raster_dimensions(data_source):
+    wgs84 = osr.SpatialReference()
+    wgs84.SetFromUserInput('WGS84')
+    wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+
+    # Open the image source and get the transforms
+    src_sr = osr.SpatialReference()
+    src_sr.ImportFromWkt(data_source.GetProjection())
+    src_sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    gps_to_raster = osr.CoordinateTransformation(wgs84, src_sr)
+    raster_to_gps = osr.CoordinateTransformation(src_sr, wgs84)
+    gt = data_source.GetGeoTransform()
+    fwd_trans = Affine.from_gdal(*gt)
+    rev_trans = ~fwd_trans
+
+    data = {
+        "geo": {},
+        "image": {},
+        "pixel": {}
+    }
+
+    i_orig_x, i_orig_y = fwd_trans * (0, 0)
+    i_max_x, i_max_y = fwd_trans * (data_source.RasterXSize, data_source.RasterYSize)
+    min_long, max_lat, _ = raster_to_gps.TransformPoint(i_orig_x, i_orig_y)
+    max_long, min_lat, _ = raster_to_gps.TransformPoint(i_max_x, i_max_y)
+
+    gx_size = (max_long - min_long) / float(data_source.RasterXSize)
+    gy_size = (max_lat - min_lat) / float(data_source.RasterYSize)
+
+    data["geo"]["min_x"] = round(min_long, 7)
+    data["geo"]["min_y"] = round(min_lat, 7)
+    data["geo"]["max_x"] = round(max_long, 7)
+    data["geo"]["max_y"] = round(max_lat, 7)
+    data["geo"]["pixel_x"] = gx_size
+    data["geo"]["pixel_y"] = gy_size
+
+    data["pixel"]["min_x"] = 0
+    data["pixel"]["min_y"] = 0
+    data["pixel"]["max_x"] = data_source.RasterXSize
+    data["pixel"]["max_y"] = data_source.RasterYSize
+
+    data["image"]["min_x"] = i_orig_x
+    data["image"]["min_y"] = i_orig_y
+    data["image"]["max_x"] = i_max_x
+    data["image"]["max_y"] = i_max_y
+
+    return data
+
 def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, max_lat, max_long, output_type="GTiff", remove_alpha=False):
     """
     Convert a georeferenced raster file to another format and crop it to the given GPS coordinates
@@ -287,14 +527,84 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
     real_height = (max_lat - min_lat) * degree_lat_to_miles(center_lat)
     log.debug(f"Cropping to {real_width}mi wide by {real_height}mi high")
 
+    # Transform from GPS coords to pixel
+    wgs84 = osr.SpatialReference()
+    wgs84.SetFromUserInput('WGS84')
+    wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+
+    src_ds = gdal.Open(str(input_filename))
+    GDAL_ERROR.check("Error parsing input file", src_ds)
+    src_sr = osr.SpatialReference()
+    src_sr.ImportFromWkt(src_ds.GetProjection())
+    src_sr.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    gps_to_image = osr.CoordinateTransformation(wgs84, src_sr)
+    image_to_gps = osr.CoordinateTransformation(src_sr, wgs84)
+    gt = src_ds.GetGeoTransform()
+    fwd_trans = Affine.from_gdal(*gt)
+    rev_trans = ~fwd_trans
+
+    uli_x, uli_y, _ = gps_to_image.TransformPoint(min_long, max_lat)
+    ulp_x, ulp_y = rev_trans * (uli_x, uli_y)
+    ulp_x, ulp_y = round(ulp_x, 3), round(ulp_y, 3)
+
+    lri_x, lri_y, _ = gps_to_image.TransformPoint(max_long, min_lat)
+    lrp_x, lrp_y = rev_trans * (lri_x, lri_y)
+    lrp_x, lrp_y = round(lrp_x, 3), round(lrp_y, 3)
+
+    src_data = get_raster_dimensions(src_ds)
+    log.debug("Input file")
+    log.debug(f"  raster = {src_data['pixel']['max_x'], src_data['pixel']['max_y']}")
+    log.debug(f"  ULg = {src_data['geo']['min_x'], src_data['geo']['max_y']}")
+    log.debug(f"  ULi = {src_data['image']['min_x'], src_data['image']['max_y']}")
+    log.debug(f"  ULp = {src_data['pixel']['min_x'], src_data['pixel']['min_y']}")
+    log.debug(f"  LRg = {src_data['geo']['max_x'], src_data['geo']['min_y']}")
+    log.debug(f"  LRi = {src_data['image']['max_x'], src_data['image']['min_y']}")
+    log.debug(f"  LRp = {src_data['pixel']['max_x'], src_data['pixel']['max_y']}")
+
+    center_lat =  (max_lat + min_lat)/2
+    real_width = (max_long - min_long) * degree_long_to_miles(center_lat)
+    real_height = (max_lat - min_lat) * degree_lat_to_miles(center_lat)
+    log.debug(f"Cropping to {real_width}mi wide by {real_height}mi high")
+
+    # Close the file
+    src_ds = None
+
+    # Adjust to the nearest whole pixel so we cleanly crop
+    ulp_x = math.floor(ulp_x)
+    ulp_y = math.floor(ulp_y)
+    lrp_x = math.ceil(lrp_x)
+    lrp_y = math.ceil(lrp_y)
+
+    # Crop the input into the requested size
     # Using shell commands for this because the native python interface isn't working after recent GDAL upgrade plus testing agaisnt more types of input files
     # Use shell commands until I have time to debug/fix the native code
     log.info(f"Cropping to boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
     log.info(f"Converting to {output_type}")
+    log.debug(f"Adjusted to pixel crop boundaries top={ulp_y} left={ulp_x} bottom={lrp_y} right={lrp_x}")
     band_args = "-b 1 -b 2 -b 3" if remove_alpha else ""
-    retcode, _, stderr = Shell(f"gdal_translate -of {output_type} {band_args} -projwin_srs EPSG:4326 -projwin {min_long} {max_lat} {max_long} {min_lat} {input_filename} {output_filename}")
+    # retcode, _, stderr = Shell(f"gdal_translate -of {output_type} {band_args} -projwin_srs EPSG:4326 -projwin {min_long} {max_lat} {max_long} {min_lat} {input_filename} {output_filename}")
+    retcode, _, stderr = Shell(f"gdal_translate -of {output_type} {band_args} -srcwin {ulp_x} {ulp_y} {lrp_x - ulp_x} {lrp_y - ulp_y} {input_filename} {output_filename}")
     if retcode != 0 or "ERROR" in stderr:
         raise ApplicationError(f"Could not crop file: {stderr}")
+
+
+    # Check the boundaries of the output file we just created
+    out_ds = gdal.Open(str(output_filename))
+    GDAL_ERROR.check("Error parsing output file", out_ds)
+
+    out_data = get_raster_dimensions(out_ds)
+    log.debug("Output file")
+    log.debug(f"  raster = {out_data['pixel']['max_x'], out_data['pixel']['max_y']}")
+    log.debug(f"  ULg = {out_data['geo']['min_x'], out_data['geo']['max_y']}")
+    log.debug(f"  ULi = {out_data['image']['min_x'], out_data['image']['max_y']}")
+    log.debug(f"  ULp = {out_data['pixel']['min_x'], out_data['pixel']['min_y']}")
+    log.debug(f"  LRg = {out_data['geo']['max_x'], out_data['geo']['min_y']}")
+    log.debug(f"  LRi = {out_data['image']['max_x'], out_data['image']['min_y']}")
+    log.debug(f"  LRp = {out_data['pixel']['max_x'], out_data['pixel']['max_y']}")
+
+
+
+
 
     # ds = gdal.Open(str(input_filename))
     # GDAL_ERROR.check("Error parsing input file", ds)
@@ -379,6 +689,60 @@ def dem_to_model2(dem_filename, model_filename, z_exaggeration=1.0):
         retcode, _, stderr = Shell(f"openscad -o {model_filename} {scad_file.name}")
         if retcode != 0 or "ERROR" in stderr:
             raise ApplicationError(f"Could not render scad file to stl: {stderr}")
+
+def create_virtual_dataset(file_list):
+    """
+    Create a virtual dataset using the list of files
+    """
+    log = GetLogger()
+    if list_like(file_list):
+        if len(file_list) > 1:
+            log.info("Merging input files into virtual data set")
+            _, virtual_file = tempfile.mkstemp()
+            # The python interface to this is horrifying, so use the command line app
+            retcode, _, stderr = Shell("gdalbuildvrt {} {}".format(virtual_file, " ".join(file_list)))
+            if retcode != 0 or "ERROR" in stderr:
+                raise ApplicationError(f"Could not merge input files: {stderr}")
+        else:
+            log.debug(f"No virtual dataset to create; directly using {file_list[0]}")
+            virtual_file = file_list[0]
+    else:
+        log.debug(f"No virtual dataset to create; directly using {file_list}")
+        virtual_file = file_list
+
+    return virtual_file
+
+def rotate_raster(raster_filename, output_filename, rotation_degrees):
+    log = GetLogger()
+
+    src_ds = gdal.Open(str(raster_filename))
+    GDAL_ERROR.check("Error parsing input file", src_ds)
+
+    # Make a copy of the original
+    _, intermediate_file = tempfile.mkstemp()
+    log.debug(f"Using intermediate tempfile {intermediate_file}")
+    driver = gdal.GetDriverByName("GTiff")
+    dst_ds = driver.CreateCopy(intermediate_file, src_ds, strict=0)
+
+    # Get the center of the raster
+    center_x = src_ds.RasterXSize / 2
+    center_y = src_ds.RasterYSize / 2
+
+    # Create a rotated geotransform
+    gt = src_ds.GetGeoTransform()
+    fwd = Affine.from_gdal(*gt)
+    rotate = fwd * fwd.rotation(rotation_degrees, (center_x, center_y))
+
+    # Set the transform in the copy
+    log.info(f"Rotating raster by {rotation_degrees} degrees")
+    dst_ds.SetGeoTransform(rotate.to_gdal())
+    # Close the file
+    dst_ds = None
+
+    # Run the intermediate file through gdalwarp to make it north-up again
+    retcode, _, stderr = Shell(f"gdalwarp -r bilinear -wo \"NUM_THREADS=ALL_CPUS\" {intermediate_file} {output_filename}")
+    if retcode != 0 or "ERROR" in stderr:
+        raise ApplicationError(f"Failed to process file to north-up: {stderr}")
 
 def get_raster_boundaries_geo(data_source):
     """
@@ -751,7 +1115,7 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=P
     log.info("Converting and cropping elevation data")
     convert_and_crop_raster(crop_input_file, cache_dir / dem_filename, min_lat, min_long, max_lat, max_long, remove_alpha=False)
 
-def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir="cache"):
+def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir=Path("cache")):
     """
     Get the imagery data for the given region. This will download, crop and
     convert the requested data.
