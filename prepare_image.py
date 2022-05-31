@@ -29,10 +29,10 @@ from util import Color
     "max_lat" : (OptionalValueType(float), None),
     "max_long" : (OptionalValueType(float), None),
     "draw_track": (BoolType(), False),
-    "track_color" : (Color(), None),
+    "track_color" : (Color(), Color()("red")),
     "track_width" : (PositiveNonZeroIntegerType(), 10),
-    "max_width" : (PositiveIntegerType(), 0),
-    "max_height" : (PositiveIntegerType(), 0),
+    "max_width" : (PositiveIntegerType(), 2048),
+    "max_height" : (PositiveIntegerType(), 2048),
     "input_files" : (OptionalValueType(ItemList(StrType())), None),
     "output_file" : (StrType(), None),
     "cache_dir" : (StrType(), "cache"),
@@ -64,7 +64,7 @@ def main(gpx_file,
         max_lat         (float)         Northern boundary of the region to crop
         max_long        (float)         Western boundary of the region to crop
         draw_track      (bool)          Whether or not to draw the track on the image
-        track_color:    (str or 
+        track_color:    (str or
                         tuple of int)   The color to draw the tracks in, either by name or as RGB tuple
         track_width:    (int)           Width of the track, in pixels
         max_width:      (int)           Max width of the final image, in pixels. The image will be resized to fit inside this
@@ -73,7 +73,6 @@ def main(gpx_file,
                                         cache will be searched for image files that cover the requested area
         output_file:    (str)           Output file to create, in PNG format
     """
-
     log = GetLogger()
 
     if not output_file.endswith("png"):
@@ -84,7 +83,7 @@ def main(gpx_file,
         return False
 
     # Determine the bounds of the output
-    if gpx_file:
+    if gpx_file and None in (min_lat, min_long, max_lat, max_long):
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
         min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
@@ -94,10 +93,11 @@ def main(gpx_file,
 
     cache_dir = Path(cache_dir)
     if not input_files:
-        if not (cache_dir / get_cropped_image_filename(max_lat, min_long, min_lat, max_long)).exists():
+        cache_file = cache_dir / get_cropped_image_filename(max_lat, min_long, min_lat, max_long)
+        if not cache_file.exists():
             log.error("Could not find image data in cache")
             return False
-        input_files = [cache_dir / get_cropped_image_filename(max_lat, min_long, min_lat, max_long)]
+        input_files = [cache_file]
 
     # Build a virtual data set if there is more than one input file
     if len(input_files) > 1:
@@ -218,8 +218,8 @@ if __name__ == '__main__':
     parser.add_argument("-a", "--draw-track", action="store_true", help="Draw the track(s) from the GPX file onto the image")
     parser.add_argument("-t", "--track-color", type=Color(), metavar="COLOR", help="The color to draw the track in, either a name or RGB tuple")
     parser.add_argument("-r", "--track-width", type=PositiveNonZeroIntegerType(), default=20, metavar="PIXELS", help="The width of the track to draw, in pixels")
-    parser.add_argument("-x", "--max-width", type=PositiveIntegerType(), default=0, metavar="PIXELS", help="Resize to a maximum width, in pixels")
-    parser.add_argument("-y", "--max-height", type=PositiveIntegerType(), default=0, metavar="PIXELS", help="Resize to a maximum height, in pixels")
+    parser.add_argument("-x", "--max-width", type=PositiveIntegerType(), default=2048, metavar="PIXELS", help="Resize to a maximum width, in pixels")
+    parser.add_argument("-y", "--max-height", type=PositiveIntegerType(), default=2048, metavar="PIXELS", help="Resize to a maximum height, in pixels")
     parser.add_argument("-i", "--input-file", dest="input_files", type=StrType(), action="append", metavar="FILENAME", help="One or more input files, in a raster format that GDAL can read. If these are not specified, the script will look for image files in the cache")
     parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Output file (PNG format)")
     parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to look for image files in, if input-file was not specified")

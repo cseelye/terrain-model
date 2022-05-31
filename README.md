@@ -42,11 +42,11 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
 ./build_mesh.py --gpx-file work/hitw.gpx \
                  --padding 0.2 \
                  --z-exaggeration 2 \
-                 --model-file work/hitw.stl
+                 --mesh-file work/hitw.stl
 ```
 5. Convert the mesh to a blender model, size it to something printable, add thickness, square off the bottom, etc.
 ```
-./create_model.py --model-file work/hitw.stl \
+./create_model.py --mesh-file work/hitw.stl \
                   --min-thickness 0.125 \
                   --size 4.5 \
                   --output work/hitw.blend

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a 3D model of terrain"""
+"""Create a 3D mesh of terrain"""
 
 from pathlib import Path
 
@@ -22,85 +22,85 @@ from geo import GPXFile, dem_to_model2, get_cropped_elevation_filename
     "max_lat" : (OptionalValueType(float), None),
     "max_long" : (OptionalValueType(float), None),
     "dem_filename" : (OptionalValueType(StrType()), None),
-    "model_file" : (OptionalValueType(StrType()), None),
+    "mesh_file" : (OptionalValueType(StrType()), None),
     "z_exaggeration" : (float, 1.0),
     "cache_dir" : (StrType(), "cache"),
 })
-def build_model(gpx_file,
+def build_mesh(gpx_file,
                 padding,
                 square,
                 min_lat,
                 min_long,
                 max_lat,
                 max_long,
-                model_file,
+                mesh_file,
                 z_exaggeration,
                 dem_filename,
                 cache_dir):
     """
-    Create a 3D model of terrain
+    Create a 3D mesh of terrain
 
     Args:
-        gpx_file:       (str)   A file containing one of more tracks to use to determine the area of terrain to model
+        gpx_file:       (str)   A file containing one of more tracks to use to determine the area of terrain to mesh
         padding:        (float) Padding to add around the GPX track, in miles
-        min_lat         (float) Southern boundary of the region to model
-        min_long        (float) Eastern boundary of the region to model
-        max_lat         (float) Northern boundary of the region to model
-        max_long        (float) Western boundary of the region to model
-        model_file:     (str)   File name to write the 3D model to
-        z_exaggeration: (float) How much Z-axis exaggeration to apply to the model
+        min_lat         (float) Southern boundary of the region to mesh
+        min_long        (float) Eastern boundary of the region to mesh
+        max_lat         (float) Northern boundary of the region to mesh
+        max_long        (float) Western boundary of the region to mesh
+        mesh_file:     (str)   File name to write the 3D mesh to
+        z_exaggeration: (float) How much Z-axis exaggeration to apply to the mesh
     """
     log = GetLogger()
 
     # Determine the bounds of the output
-    if gpx_file:
+    if gpx_file and None in (min_lat, min_long, max_lat, max_long):
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
         min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
-    if not model_file:
-        model_file = Path(gpx_file).stem + ".x3d"
+    if not mesh_file and gpx_file:
+        mesh_file = Path(gpx_file).stem + ".stl"
 
-    if None in (min_lat, min_long, max_lat, max_long):
-        raise InvalidArgumentError("You must specify an area to crop")
-    if not model_file:
-        raise InvalidArgumentError("model_file must be specified")
+    if not dem_filename and None in (min_lat, min_long, max_lat, max_long):
+        raise InvalidArgumentError("You must specify an area")
 
-    log.info(f"Model boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
+    log.info(f"mesh boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
 
     # Get the elevation data
     if dem_filename:
         if not Path(dem_filename).exists():
             raise InvalidArgumentError("DEM file does not exist")
+        input_file = dem_filename
     else:
         cache_dir = Path(cache_dir)
         dem_filename = Path(get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long))
-        log.debug(f"Looking for elevation data {cache_dir / dem_filename}")
-        if not (cache_dir / dem_filename).exists():
+        input_file = cache_dir / dem_filename
+        log.debug(f"Looking for elevation data {input_file}")
+        if not (input_file).exists():
             raise ApplicationError("Could not find elevation data")
 
-    # Create the model from the elevation data
-    log.info("Creating 3D model from elevation data")
-    dem_to_model2(cache_dir / dem_filename, model_file, z_exaggeration)
+    # Create the mesh from the elevation data
+    log.info("Creating 3D mesh from elevation data")
+    dem_to_model2(input_file, mesh_file, z_exaggeration)
 
-    log.passed(f"Successfully created model {model_file}")
+    log.passed(f"Successfully created mesh {mesh_file}")
     return True
 
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Create a 3D model of terrain")
-    area_group = parser.add_argument_group("Area specification", "The area covered by the model can be specified either with a GPX track or by absolute lat/long coordinates")
+    parser = ArgumentParser(description="Create a 3D mesh of terrain")
+    area_group = parser.add_argument_group("Area specification", "The area covered by the mesh can be specified either with a GPX track or by absolute lat/long coordinates")
     area_group.add_argument("-g", "--gpx-file", type=StrType(), metavar="FILENAME", help="GPX file to use")
     area_group.add_argument("-p", "--padding", type=float, metavar="MILES", help="Padding to add around the GPX track, in miles")
     area_group.add_argument("-q", "--square", action="store_true", help="Make the region around the GPX track a square")
-    area_group.add_argument("-n", "--north", type=float, dest="max_lat", metavar="DEGREES", help="The northern edge of the model, in decimal degrees latitude")
-    area_group.add_argument("-s", "--south", type=float, dest="min_lat", metavar="DEGREES", help="The southern edge of the model, in decimal degrees latitude")
-    area_group.add_argument("-e", "--east", type=float, dest="max_long", metavar="DEGREES", help="The eastern edge of the model, in decimal degrees longitude")
-    area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the model, in decimal degrees longitude")
-    parser.add_argument("-z", "--z-exaggeration", type=float, default=1.0, metavar="", help="Amount of z-axis exaggeration to use in the model")
-    parser.add_argument("-m", "--model-file", type=StrType(), metavar="FILENAME", help="Model file to write out. If not specified, the name will be derived from the GPX file")
+    area_group.add_argument("-n", "--north", type=float, dest="max_lat", metavar="DEGREES", help="The northern edge of the mesh, in decimal degrees latitude")
+    area_group.add_argument("-s", "--south", type=float, dest="min_lat", metavar="DEGREES", help="The southern edge of the mesh, in decimal degrees latitude")
+    area_group.add_argument("-e", "--east", type=float, dest="max_long", metavar="DEGREES", help="The eastern edge of the mesh, in decimal degrees longitude")
+    area_group.add_argument("-w", "--west", type=float, dest="min_long", metavar="DEGREES", help="The western edge of the mesh, in decimal degrees longitude")
+    parser.add_argument("-z", "--z-exaggeration", type=float, default=1.0, metavar="", help="Amount of z-axis exaggeration to use in the mesh")
+    parser.add_argument("-m", "--mesh-file", type=StrType(), metavar="FILENAME", help="Mesh file to write out. If not specified, the name will be derived from the GPX file")
     parser.add_argument("-i", "--input-dem-file", type=StrType(), dest="dem_filename", metavar="FILENAME", help="Elevation data file to use. If this is not specified, the script will look for the appropriate elevation data in the cache directory instead")
     parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to look for data files in, if input-dem-file was not specified")
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(build_model, args)
+    app = PythonApp(build_mesh, args)
     app.Run(**args)
