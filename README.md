@@ -5,7 +5,7 @@ This tool will create a 3D model in Blender given a set of GPS coordinates. I bu
 </p>
 
 ## Workflow
-This is the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files. *Note this is built to work with The National Map, a US resource, so regions outside the US may not be able to automatically download imagery/elevation data.*
+These are the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files. *Note this is built to work with The National Map, a US resource, so regions outside the US may not be able to automatically download imagery/elevation data.*
 
 Clone the git repo then launch the container:
 ```
