@@ -1,26 +1,27 @@
+"""Create an STL mesh file from a DEM file"""
 ## This file is part of https://github.com/flatpolar/geotrimesh
 ## Original author Michael Nolde http://www.flatpolar.org
 ## Licensed under the Apache License, Version 2.0 (see included LICENSE)
 ##
 ## Modified by Carl Seelye as part of https://github.com/cseelye/terrain-model
-## Nov 2021 - I haven't changed the structure/flow or done any cleanup or 
+## Nov 2021 - I haven't changed the structure/flow or done any cleanup or
 ## refactoring, I've only made specific changes to fit into my needs:
 ##  * Add my logging and progress display
 ##  * Make this file importable as a module
 ##  * Simplify args to generate_terrain and make them fit my use case better
-##  * Do not add any thickness to the model, just generate a mesh (I prefer 
+##  * Do not add any thickness to the model, just generate a mesh (I prefer
 ##    to post-process using blender)
 ##  * Fix scaling of the model (I might have caused this with other changes,
 ##    but I am fixing it with a a scale instruction in the final output)
 
 import os
 import sys
-import subprocess
+#import subprocess
+#import json
+import argparse
+#import time
 from osgeo import gdal, ogr
 import numpy as np
-import json
-import argparse
-import time
 
 from pyapputil.logutil import GetLogger
 
@@ -44,9 +45,9 @@ def read_dem(filepath):
     dem_ymin = dem_ymax - dem_tmp_rows * dem_yres
     dem_band = dem_dataset.GetRasterBand(1)
     dem_tmp_array = dem_band.ReadAsArray(0, 0, dem_tmp_cols, dem_tmp_rows).astype(np.float32)
-    dem_nodata = dem_band.GetNoDataValue()
-    dem_xcent = (dem_xmin + dem_xmax) / 2.0
-    dem_ycent = (dem_ymin + dem_ymax) / 2.0
+    # dem_nodata = dem_band.GetNoDataValue()
+    # dem_xcent = (dem_xmin + dem_xmax) / 2.0
+    # dem_ycent = (dem_ymin + dem_ymax) / 2.0
     dem_ydist = dem_ymax - dem_ymin
     dem_xdist = dem_xmax - dem_xmin
 
@@ -69,12 +70,14 @@ def read_dem(filepath):
         try:
             #print(dem_intermed_array.shape)
 
-            dem_tmp_array_valmin = np.nanmin(dem_intermed_array[dem_intermed_array != dem_tmp_nodata])
-            dem_tmp_array_valmax = np.nanmax(dem_intermed_array[dem_intermed_array != dem_tmp_nodata])
+            # dem_tmp_array_valmin = np.nanmin(dem_intermed_array[dem_intermed_array != dem_tmp_nodata])
+            # dem_tmp_array_valmax = np.nanmax(dem_intermed_array[dem_intermed_array != dem_tmp_nodata])
+            np.nanmin(dem_intermed_array[dem_intermed_array != dem_tmp_nodata])
+            np.nanmax(dem_intermed_array[dem_intermed_array != dem_tmp_nodata])
         except:
-            with open(os.path.join(scad_dirpath, scad_filename_base + '.scad.empty'), 'w') as scad_file:
-                scad_file.write('')
-        
+            with open(os.path.join(scad_dirpath, scad_filename_base + '.scad.empty'), 'w', encoding='utf-8') as scad_out:
+                scad_out.write('')
+
             sys.exit()
 
         dem_array = dem_intermed_array
@@ -86,7 +89,7 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
     log = GetLogger()
 
     # polygon_extrude_height = 10000.0
-#    polyhedron_extrude_height = 100.0
+    # polyhedron_extrude_height = 100.0
 
     dem_array, dem_cols, dem_rows, dem_xmin, dem_ymax, dem_xres, dem_yres, dem_xdist, dem_ydist = read_dem(str(dem_filepath))
 
@@ -108,7 +111,7 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
         clippoly_layer_extent_ymax = dem_ymax
     clippoly_layer_extent_xcent = (clippoly_layer_extent_xmax + clippoly_layer_extent_xmin) / 2.0
     clippoly_layer_extent_ycent = (clippoly_layer_extent_ymax + clippoly_layer_extent_ymin) / 2.0
- 
+
 
 
 
@@ -116,17 +119,17 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
     c = []
 
 
-    log.debug("nanmin", np.nanmin(dem_array))
+    log.debug(f"nanmin {np.nanmin(dem_array)}")
     dem_array = np.copy(dem_array-zmean_total)
-    log.debug("nanmin", np.nanmin(dem_array))
+    log.debug(f"nanmin {np.nanmin(dem_array)}")
 
 
     polyhedron_points = []
-    polyhedron_points_floor = []
-    polyhedron_points_ceil = []
-    polyhedron_faces = []
+    # polyhedron_points_floor = []
+    # polyhedron_points_ceil = []
+    # polyhedron_faces = []
     polyhedron_faces_array = np.zeros((dem_rows,dem_cols,16,3), dtype=np.int32)
-    polyhedron_faces_clean_array = np.zeros((dem_rows,dem_cols,16,3), dtype=np.int32)
+    # polyhedron_faces_clean_array = np.zeros((dem_rows,dem_cols,16,3), dtype=np.int32)
     polyhedron_points_floor_array = np.zeros((dem_rows*dem_cols,3), dtype=np.float32)
     #polyhedron_points_ceil_array = np.zeros((dem_rows*dem_cols,3), dtype=np.float32)
 
@@ -156,7 +159,7 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
             z_a = (dem_array[i][j] * z_scale) #- zmean_total
 
 
-            dem_x = j0_coord 
+            dem_x = j0_coord
             dem_y = i0_coord
 
             polyhedron_points_floor_array[(i*dem_cols)+j][:] = np.array([dem_x - clippoly_layer_extent_xcent, dem_y  - clippoly_layer_extent_ycent, z_a])
@@ -194,13 +197,13 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
                 point_c_floor = (dem_rows*dem_cols) + (i*dem_cols)+j+1
                 point_d_floor = (dem_rows*dem_cols) + ((i+1)*dem_cols)+j+1
 
-                
-                
+
+
                 if z_a > -5000 and z_b > -5000 and z_c > -5000:
 
 
-                    polyhedron_faces_array[i][j][0][:] = np.array([point_c_ceil, point_b_ceil, point_a_ceil])     ## ceiling 
-                    polyhedron_faces_array[i][j][1][:] = np.array([point_b_floor, point_a_floor, point_a_ceil])   ## left sidev 
+                    polyhedron_faces_array[i][j][0][:] = np.array([point_c_ceil, point_b_ceil, point_a_ceil])     ## ceiling
+                    polyhedron_faces_array[i][j][1][:] = np.array([point_b_floor, point_a_floor, point_a_ceil])   ## left sidev
                     polyhedron_faces_array[i][j][2][:] = np.array([point_b_ceil, point_b_floor, point_a_ceil])
                     polyhedron_faces_array[i][j][3][:] = np.array([point_c_floor, point_b_floor, point_b_ceil])   ## right side (diagonal)
                     polyhedron_faces_array[i][j][4][:] = np.array([point_c_ceil, point_c_floor, point_b_ceil])
@@ -252,8 +255,8 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
                     j_right = j + 1 if j < dem_cols-1 else dem_cols
 
 
-                    for i_neighbour in range(i_bottom, i_top+1): 
-                        for j_neighbour in range(j_left, j_right+1): 
+                    for i_neighbour in range(i_bottom, i_top+1):
+                        for j_neighbour in range(j_left, j_right+1):
 
                             array1 = np.array([polyhedron_face[0], polyhedron_face[1], polyhedron_face[2]])
                             array2 = np.array([polyhedron_face[0], polyhedron_face[2], polyhedron_face[1]])
@@ -287,22 +290,22 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
         for polyhedron_point_id in range(0, polyhedron_points_floor_array.shape[0]):
 
             polyhedron_point = [polyhedron_points_floor_array[polyhedron_point_id][0],
-              polyhedron_points_floor_array[polyhedron_point_id][1], 
+              polyhedron_points_floor_array[polyhedron_point_id][1],
               polyhedron_points_floor_array[polyhedron_point_id][2]-(l*10.0)]
- 
+
             #print(polyhedron_point)
             polyhedron_points.append(polyhedron_point)
 
 
-    log.debug('dem_extent:', dem_x_min, dem_y_min, dem_x_max, dem_y_max)
+    log.debug(f'dem_extent: {dem_x_min}, {dem_y_min}, {dem_x_max}, {dem_y_max}')
     log.debug(clippoly_layer_extent_xcent, clippoly_layer_extent_ycent)
-    log.debug('points', len(polyhedron_points))
-    log.debug('faces', polyhedron_faces_array.shape[0])
-    log.debug('faces_clean', len(polyhedron_faces_clean))
+    log.debug(f'points {len(polyhedron_points)}')
+    log.debug(f'faces {polyhedron_faces_array.shape[0]}')
+    log.debug(f'faces_clean {len(polyhedron_faces_clean)}')
 
     c.append('module dem() {')
     c.append('   scale([1000, 1000, 0.01])')
-    c.append('    polyhedron(points={}, faces={});'.format(polyhedron_points, polyhedron_faces_clean))
+    c.append(f'    polyhedron(points={polyhedron_points}, faces={polyhedron_faces_clean});')
     c.append('}')
 
     c.append('dem();')
@@ -345,7 +348,7 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
     #                 for point_id in range(0, geom_sub_bound.GetPointCount()-1):
     #                     geom_sub_bound_point_x, geom_sub_bound_point_y, dummy = geom_sub_bound.GetPoint(point_id)
 
-                    
+
     #                     polygon_path.append(point_cnt)
     #                     polygon_points.append([geom_sub_bound_point_x - clippoly_layer_extent_xcent, geom_sub_bound_point_y - clippoly_layer_extent_ycent])
     #                     #polygon_points.append([0, 0])
@@ -380,7 +383,7 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
 
     #             for point_id in range(0, geom_bound.GetPointCount()):
     #                 geom_bound_point_x, geom_bound_point_y, dummy = geom_bound.GetPoint(point_id)
-                
+
     #                 polygon_path.append(point_cnt)
     #                 polygon_points.append([geom_bound_point_x - clippoly_layer_extent_xcent, geom_bound_point_y - clippoly_layer_extent_ycent])
     #                 #polygon_points.append([0, 0])
@@ -397,9 +400,9 @@ def generate_terrain(dem_filepath, z_scale=2.0, clippoly_filepath=None, zmean_to
     #         c.append('dem();')
     #         c.append('}')
 
-    # from operator import itemgetter 
+    # from operator import itemgetter
 
-    return c 
+    return c
 
 
 if __name__ == "__main__":
@@ -441,12 +444,12 @@ if __name__ == "__main__":
         zmin_total = float(args.zmin)
         zmax_total = float(args.zmax)
         zmean_total = zmin_total + ((zmax_total - zmin_total) / 2.0)
-    except:
+    except ValueError:
         zmean_total = 0
 
     terrain_command_lines = generate_terrain(clippoly_filepath, dem_dirpath, dem_prefix, dem_tilex, dem_tiley, zmean_total)
 
-    with open(os.path.join(scad_dirpath, scad_filename_base + '.scad'), 'w') as scad_file:
+    with open(os.path.join(scad_dirpath, scad_filename_base + '.scad'), 'w', encoding='utf-8') as scad_file:
         for command_line in terrain_command_lines:
             scad_file.write(command_line + '\n')
 
