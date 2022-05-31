@@ -2,7 +2,7 @@ affine==2.3.1
 lxml==4.8.0
 numpy==1.22.0
 pathlib==1.0.1
-pyapputil==1.1.0
+pyapputil==1.1.8
 requests==2.27.1
 scipy==1.8.1
 pyshp==2.3.0
@@ -12,7 +12,7 @@ opencv-python-headless==4.5.5.64
 python-dateutil==2.8.2
 
 # From blender's integrated python
-certifi==2021.10.8
+certifi>=2021.10.8
 charset-normalizer==2.0.10
 Cython==0.29.26
 idna==3.3
