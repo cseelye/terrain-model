@@ -40,7 +40,7 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
                   --output output/hitw.blend
 ```
 
-4. The last step hasn't been containerized yet, so it requires installing Blender 3.1 on your machine and running the script directly on your machine (not in the container). Eventually this step and the previous will be combined into a single script that will run in the container.
+4. The last step isn't polished yet; it hasn't been containerized, so it requires installing Blender 3.1 on your machine, installing the required python modules, running the script directly on your machine (not in the container), and it only runs on macOS. Eventually this step and the previous will be combined into a single script that will run in the container.
 ```
 ./finish_model.py --blender-file output/hitw.blend \
                   --map-image output/hitw.png \
@@ -51,7 +51,6 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
 Alternately you can manually open the model in blender, UV map the image onto it, and export it as a Collada file.
 
 <p align="center"><img src="example_blender3.png" alt="example image"/></p>
-
 
 5. Compress the collada file and image files into a single zip file and upload to [shapeways](https://www.shapeways.com) for printing. Make sure to select "M" (meters) as the dimensions when uploading.
 
