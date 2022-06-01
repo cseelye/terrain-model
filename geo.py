@@ -9,10 +9,8 @@ from urllib.parse import urlparse
 import zipfile
 
 from affine import Affine
-import affine
 from dateutil.parser import isoparse
 from lxml import etree as ET
-import numpy
 from osgeo import gdal, osr
 from pyapputil.logutil import GetLogger
 from pyapputil.exceptutil import ApplicationError
@@ -339,7 +337,10 @@ def align_image_elevation(min_lat, min_long, max_lat, max_long, cache_dir=Path("
     tile_coords = get_image_tile_range(min_lat, min_long, max_lat, max_long)
     image_files = []
     for lat, long in tile_coords:
-        tile_file = download_image_tile(lat, long, cache_dir)
+        try:
+            tile_file = download_image_tile(lat, long, cache_dir)
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as ex:
+            raise ApplicationError(f"Error downloading image: {ex}.\nTry checking your internet connection, or check https://www.sciencebase.gov/catalog/status and https://apps.nationalmap.gov/services-checker/#/uptime") from ex
         image_files.append(tile_file)
     # Create a virtual data source with all of the tiles
     file_list = " ".join(str(f) for f in image_files)
@@ -353,7 +354,10 @@ def align_image_elevation(min_lat, min_long, max_lat, max_long, cache_dir=Path("
     tile_coords = get_elevation_tile_range(min_lat, min_long, max_lat, max_long)
     elevation_files = []
     for lat, long in tile_coords:
-        tile_file = download_elevation_tile(lat, long, cache_dir)
+        try:
+            tile_file = download_elevation_tile(lat, long, cache_dir)
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as ex:
+            raise ApplicationError(f"Error downloading elevation file: {ex}.\nTry checking your internet connection, or check https://www.sciencebase.gov/catalog/status and https://apps.nationalmap.gov/services-checker/#/uptime") from ex
         elevation_files.append(tile_file)
     # Create a virtual data source with all of the tiles
     file_list = " ".join(str(f) for f in elevation_files)
@@ -602,43 +606,6 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
     log.debug(f"  LRi = {out_data['image']['max_x'], out_data['image']['min_y']}")
     log.debug(f"  LRp = {out_data['pixel']['max_x'], out_data['pixel']['max_y']}")
 
-
-
-
-
-    # ds = gdal.Open(str(input_filename))
-    # GDAL_ERROR.check("Error parsing input file", ds)
-
-    # log.debug("Input type: %s", ds.GetDriver().LongName)
-    # log.debug("Input files: %s", ds.GetFileList())
-    # log.debug("Input raster size: %s x %s", ds.RasterXSize, ds.RasterYSize)
-
-    # with tempfile.NamedTemporaryFile() as tf:
-    #     input_srs = osr.SpatialReference()
-    #     input_srs.ImportFromWkt(ds.GetProjection())
-    #     log.debug("Input SR: %s", input_srs.GetName())
-    #     output_srs = osr.SpatialReference()
-    #     output_srs.ImportFromEPSG(4326) # WGS84
-    #     output_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-    #     log.debug("Output SR: %s", output_srs.GetName())
-    #     log.info("Cropping to boundaries top(max_lat)={} left(min_long)={} bottom(min_lat)={} right(max_long)={}".format(max_lat, min_long, min_lat, max_long))
-    #     ret = gdal.Warp(tf.name, ds, outputBounds=(min_long, min_lat, max_long, max_lat),
-    #                                  outputBoundsSRS=output_srs,
-    #                                  multithread=True,
-    #                                  srcAlpha=False,
-    #                                  dstAlpha=False,
-    #                                  dstNodata=[255, 255, 255])
-    #     GDAL_ERROR.check("Error cropping", ret)
-    #     log.debug("Wrote temp ds = {}".format(tf.name))
-
-    #     log.info("Converting to {}".format(output_type))
-    #     temp_ds = gdal.Open(tf.name)
-    #     GDAL_ERROR.check("Error opening temp file", temp_ds)
-    #     band_list = None
-    #     if remove_alpha:
-    #         band_list = range(1, temp_ds.RasterCount)
-    #     ret = gdal.Translate(str(output_filename), temp_ds, format=output_type, bandList=band_list)
-    #     GDAL_ERROR.check("Error converting", ret)
 
 def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
     """
@@ -1100,7 +1067,10 @@ def get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir=P
     tile_coords = get_elevation_tile_range(min_lat, min_long, max_lat, max_long)
     elevation_files = []
     for lat, long in tile_coords:
-        tile_file = download_elevation_tile(lat, long, cache_dir)
+        try:
+            tile_file = download_elevation_tile(lat, long, cache_dir)
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as ex:
+            raise ApplicationError(f"Error downloading image: {ex}.\nTry checking your internet connection, or check https://www.sciencebase.gov/catalog/status and https://apps.nationalmap.gov/services-checker/#/uptime") from ex
         elevation_files.append(tile_file)
 
     # Create a virtual data source with all of the tiles
@@ -1138,7 +1108,10 @@ def get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_d
     tile_coords = get_image_tile_range(min_lat, min_long, max_lat, max_long)
     image_files = []
     for lat, long in tile_coords:
-        tile_file = download_image_tile(lat, long, cache_dir)
+        try:
+            tile_file = download_image_tile(lat, long, cache_dir)
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as ex:
+            raise ApplicationError(f"Error downloading image: {ex}.\nTry checking your internet connection, or check https://www.sciencebase.gov/catalog/status and https://apps.nationalmap.gov/services-checker/#/uptime") from ex
         image_files.append(tile_file)
 
     # Create a virtual data source with all of the tiles
