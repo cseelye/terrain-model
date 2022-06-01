@@ -40,6 +40,9 @@ def finish_model(map_image,
 ):
     log = GetLogger()
 
+    map_image = str(Path(map_image).absolute().resolve())
+    background_image = str(Path(background_image).absolute().resolve())
+
     log.info("Creating textures")
     # Create a material from the sat image
     map_tex = bpy.data.materials.new("map")
