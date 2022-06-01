@@ -152,8 +152,7 @@ class GPXFile:
             max_lat, max_long.
         """
         log = GetLogger()
-        tree = ET.parse(self.filename)
-        root = tree.getroot()
+        root = self._parse()
         max_lat = -90.0
         min_lat = 90.0
         max_long = -180.0
@@ -212,8 +211,7 @@ class GPXFile:
             is a list of tuples of float as lat,long.
         """
         tracks = []
-        tree = ET.parse(self.filename)
-        root = tree.getroot()
+        root = self._parse()
         for track_node in root.findall("trk", root.nsmap):
             track = []
             for node in track_node.findall("trkseg/trkpt", root.nsmap):
@@ -230,8 +228,7 @@ class GPXFile:
         Args:
             csvfile:    (string) The file path to save the tracks to.
         """
-        tree = ET.parse(self.filename)
-        root = tree.getroot()
+        root = self._parse()
         with open(csvfile, "w", encoding="utf-8") as outfile:
             outfile.write("LON,LAT\n")
             for node in root.findall("trk/trkseg/trkpt", root.nsmap):
@@ -239,6 +236,16 @@ class GPXFile:
                 node_long = float(node.attrib["lon"])
                 outfile.write(f"{node_long},{node_lat}\n")
 
+    def _parse(self):
+        if not Path(self.filename).exists():
+            raise ApplicationError(f"Could not find file {self.filename}")
+        try:
+            tree = ET.parse(self.filename)
+            return tree.getroot()
+        except OSError as ex:
+            raise ApplicationError(str(ex)) from ex
+        except ET.ParseError as ex:
+            raise ApplicationError(f"Error parsing {self.filename}: {ex}") from ex
 
 def degree_long_to_miles(lat):
     """

@@ -7,7 +7,7 @@ from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import InvalidArgumentError
+from pyapputil.exceptutil import InvalidArgumentError, ApplicationError
 
 from geo import GPXFile, get_dem_data, get_cropped_elevation_filename
 
@@ -49,7 +49,11 @@ def download_elevation_data(gpx_file,
     if gpx_file:
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
-        min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        try:
+            min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        except ApplicationError as ex:
+            log.error(ex)
+            return False
 
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to download")
@@ -59,7 +63,11 @@ def download_elevation_data(gpx_file,
     # Get the elevation data
     cache_dir = Path(cache_dir)
     dem_filename = Path(get_cropped_elevation_filename(max_lat, min_long, min_lat, max_long))
-    get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+    try:
+        get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+    except ApplicationError as ex:
+        log.error(ex)
+        return False
 
     log.passed("Successfully downloaded data")
     return True

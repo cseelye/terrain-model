@@ -7,7 +7,7 @@ from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, OptionalValueType, StrType, BoolType
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import InvalidArgumentError
+from pyapputil.exceptutil import InvalidArgumentError, ApplicationError
 
 from geo import GPXFile, get_image_data, get_cropped_image_filename
 
@@ -23,7 +23,7 @@ from geo import GPXFile, get_image_data, get_cropped_image_filename
     "max_long" : (OptionalValueType(float), None),
     "cache_dir" : (StrType(), "cache"),
 })
-def download_elevation_data(gpx_file,
+def download_image_data(gpx_file,
                             padding,
                             square,
                             min_lat,
@@ -49,7 +49,11 @@ def download_elevation_data(gpx_file,
     if gpx_file:
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
-        min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        try:
+            min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        except ApplicationError as ex:
+            log.error(ex)
+            return False
 
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to download")
@@ -59,7 +63,11 @@ def download_elevation_data(gpx_file,
     # Get the image data
     cache_dir = Path(cache_dir)
     image_filename = Path(get_cropped_image_filename(max_lat, min_long, min_lat, max_long))
-    get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+    try:
+        get_image_data(image_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+    except ApplicationError as ex:
+        log.error(ex)
+        return False
 
     log.passed("Successfully downloaded images")
     return True
@@ -78,5 +86,5 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to keep downloaded data/working files in. Reusing these files can speed up multiple runs against the same input")
     args = parser.parse_args_to_dict()
 
-    app = PythonApp(download_elevation_data, args)
+    app = PythonApp(download_image_data, args)
     app.Run(**args)

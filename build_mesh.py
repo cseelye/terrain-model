@@ -56,7 +56,11 @@ def build_mesh(gpx_file,
     if gpx_file and None in (min_lat, min_long, max_lat, max_long):
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
-        min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        try:
+            min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        except ApplicationError as ex:
+            log.error(ex)
+            return False
     if not mesh_file and gpx_file:
         mesh_file = Path(gpx_file).stem + ".stl"
 
@@ -77,7 +81,11 @@ def build_mesh(gpx_file,
         input_file = cache_dir / dem_filename
         log.debug(f"Looking for cached elevation data {input_file}")
         if not (input_file).exists():
-            get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+            try:
+                get_dem_data(dem_filename, min_lat, min_long, max_lat, max_long, cache_dir)
+            except ApplicationError as ex:
+                log.error(ex)
+                return False
 
     # Create the mesh from the elevation data
     log.info("Creating 3D mesh from elevation data")

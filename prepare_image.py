@@ -86,7 +86,11 @@ def main(gpx_file,
     if gpx_file and None in (min_lat, min_long, max_lat, max_long):
         log.info("Parsing GPX file")
         gpx = GPXFile(gpx_file)
-        min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        try:
+            min_lat, min_long, max_lat, max_long = gpx.GetBounds(padding, square)
+        except ApplicationError as ex:
+            log.error(ex)
+            return False
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to crop")
     log.debug(f"Requested crop boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
@@ -99,7 +103,11 @@ def main(gpx_file,
         if cache_file.exists():
             input_files = [cache_file]
         else:
-            get_image_data(image_file, min_lat, min_long, max_lat, max_long, cache_dir)
+            try:
+                get_image_data(image_file, min_lat, min_long, max_lat, max_long, cache_dir)
+            except ApplicationError as ex:
+                log.error(ex)
+                return False
             input_files = [cache_file]
 
     # Build a virtual data set if there is more than one input file
