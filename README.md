@@ -4,7 +4,7 @@ This tool will create a 3D model in Blender given a set of GPS coordinates. I bu
 <img src="example_blender1.png" alt="blender example 1"/>  <img src="example_blender2.png"  alt="blender example 2"/>
 </p>
 
-## Workflow
+## Quick Start
 These are the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files. *Note this is built to work with The National Map, a US resource, so regions outside the US may not be able to automatically download imagery/elevation data.*
 
 Clone the git repo then launch the container:
@@ -21,8 +21,6 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
                    --track-color red \
                    --track-width 10 \
                    --draw-track \
-                   --max-height 2048 \
-                   --max-width 2048 \
                    --output-file output/hitw.png
 ```
 <p align="center"><img src="example_image.png" alt="example image"/></p>
@@ -32,18 +30,30 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
 ./build_mesh.py --gpx-file work/hitw.gpx \
                  --padding 0.2 \
                  --z-exaggeration 2 \
-                 --mesh-file work/hitw.stl
+                 --mesh-file output/hitw.stl
 ```
 3. Convert the mesh to a blender model, size it to something printable, add thickness, square off the bottom, etc.
 ```
 ./create_model.py --mesh-file work/hitw.stl \
                   --min-thickness 0.125 \
                   --size 4.5 \
-                  --output work/hitw.blend
+                  --output output/hitw.blend
 ```
 
-4. Open the model in blender, UV map the image onto it, export it and upload to [shapeways](https://www.shapeways.com) for printing.
+4. The last step hasn't been containerized yet, so it requires installing Blender 3.1 on your machine and running the script directly on your machine (not in the container). Eventually this step and the previous will be combined into a single script that will run in the container.
+```
+./finish_model.py --blender-file output/hitw.blend \
+                  --map-image output/hitw.png \
+                  --background-image output/lightgrey.png \
+                  --preview-file output/preview.png \
+                  --collada-file output/hitw.dae
+```
+Alternately you can manually open the model in blender, UV map the image onto it, and export it as a Collada file.
+
 <p align="center"><img src="example_blender3.png" alt="example image"/></p>
+
+
+5. Compress the collada file and image files into a single zip file and upload to [shapeways](https://www.shapeways.com) for printing. Make sure to select "M" (meters) as the dimensions when uploading.
 
 If you want to really customize the model, stop at step 2, import the stl into your choice of programs and build it out as you wish.
 <p align="center"><img src="example_mesh.png" alt="example image"/></p>
