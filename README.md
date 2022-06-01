@@ -44,9 +44,7 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
 ```
 ./finish_model.py --blender-file output/hitw.blend \
                   --map-image output/hitw.png \
-                  --background-image output/lightgrey.png \
-                  --preview-file output/preview.png \
-                  --collada-file output/hitw.dae
+                  --background-image output/lightgrey.png
 ```
 Alternately you can manually open the model in blender, UV map the image onto it, and export it as a Collada file.
 
