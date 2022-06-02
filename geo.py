@@ -825,10 +825,10 @@ def download_elevation_tile(latitude, longitude, dest_dir):
         "datasets": "National Elevation Dataset (NED) 1/3 arc-second",
         "max": 10
     }
-    with requests.get(query_url, params=payload) as req:
-        log.debug(req.url)
-        req.raise_for_status()
-        resp = req.json()
+    with requests.get(query_url, params=payload) as r:
+        log.debug(r.url)
+        r.raise_for_status()
+        resp = r.json()
     # Filter to only matching lat/long
     items = [x for x in resp["items"] if round(x["boundingBox"]["minX"], 1) == left and round(x["boundingBox"]["maxY"], 1) == upper]
     # Sort by date to get the newest
@@ -904,10 +904,10 @@ def download_image_tile(latitude, longitude, dest_dir):
         "datasets": "USDA National Agriculture Imagery Program (NAIP)",
         "max": 100
     }
-    with requests.get(query_url, params=payload) as req:
-        log.debug(req.url)
-        req.raise_for_status()
-        resp = req.json()
+    with requests.get(query_url, params=payload) as r:
+        log.debug(r.url)
+        r.raise_for_status()
+        resp = r.json()
     # Filter to only exact matching lat/long
     items = [x for x in resp["items"] if round(x["boundingBox"]["minX"], 4) == longitude and round(x["boundingBox"]["maxY"], 4) == latitude]
     # Sort by date to get the newest

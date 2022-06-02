@@ -27,10 +27,10 @@ def download_file(url, local_file):
     """
     log = GetLogger()
     log.debug("GET %s -> %s", url, local_file)
-    with requests.get(url, stream=True) as req:
-        req.raise_for_status()
+    with requests.get(url, stream=True) as res:
+        res.raise_for_status()
         with open(local_file, "wb") as output:
-            for chunk in req.iter_content(chunk_size=16 * 1024):
+            for chunk in res.iter_content(chunk_size=16 * 1024):
                 output.write(chunk)
 
 def list_like(thing):
