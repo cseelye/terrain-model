@@ -4,6 +4,7 @@
 from pathlib import Path
 import platform
 import sys
+from zipfile import ZipFile, ZIP_DEFLATED
 
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
@@ -29,15 +30,20 @@ def finish_model(blender_file,
 ):
     log = GetLogger()
 
-    blend_file_path = Path(blender_file).resolve()
-    if not blend_file_path.exists():
+    blender_file = Path(blender_file).resolve()
+    if not blender_file.exists():
         raise InvalidArgumentError("Blend file does not exist")
 
+    background_image = Path(background_image).resolve()
+    map_image = Path(map_image).resolve()
+
     if not preview_file:
-        preview_file = str(blend_file_path.with_name("preview.png"))
+        preview_file = blender_file.with_name("preview.png")
 
     if not collada_file:
-        collada_file = str(blend_file_path.with_suffix(".dae"))
+        collada_file = blender_file.with_suffix(".dae")
+
+    zip_file = blender_file.with_suffix(".zip")
 
     # Get the current directory to add to the PYTHONPATH for blender
     cwd = Path(sys.path[0]).resolve()
@@ -52,7 +58,7 @@ def finish_model(blender_file,
     parts = [
         f"PYTHONPATH={cwd}",
         blender_path,
-        blender_file,
+        str(blender_file),
         "--python-use-system-env",
         "--python",
         "blender_finish_model.py",
@@ -60,13 +66,13 @@ def finish_model(blender_file,
     if any([map_image, background_image, preview_file, collada_file]):
         parts += ["--"]
     if map_image:
-        parts += ["--map-image", map_image]
+        parts += ["--map-image", str(map_image)]
     if background_image:
-        parts += ["--background-image", background_image]
+        parts += ["--background-image", str(background_image)]
     if preview_file:
-        parts += ["--preview-file", preview_file]
+        parts += ["--preview-file", str(preview_file)]
     if collada_file:
-        parts += ["--collada-file", collada_file]
+        parts += ["--collada-file", str(collada_file)]
 
     cmd = " ".join(parts)
     log.info("Invoking blender...")
@@ -74,11 +80,17 @@ def finish_model(blender_file,
     if stdout:
         log.raw(stdout)
 
+    log.info("Creating archive")
+    with ZipFile(zip_file, "w", compression=ZIP_DEFLATED) as archive:
+        archive.write(str(collada_file), collada_file.name)
+        archive.write(str(background_image), background_image.name)
+        archive.write(str(map_image), map_image.name)
+
     if retcode == 0:
-        log.passed("Successfully modified model")
+        log.passed("Successfully finished model")
         return True
     else:
-        log.error("Failed to modify model")
+        log.error("Failed to finish model")
         log.warning(stderr)
         return False
 

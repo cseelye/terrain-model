@@ -32,6 +32,8 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
                  --z-exaggeration 2 \
                  --mesh-file output/hitw.stl
 ```
+<p align="center"><img src="example_mesh.png" alt="example image"/></p>
+
 3. Convert the mesh to a blender model, size it to something printable, add thickness, square off the bottom, etc.
 ```
 ./create_model.py --mesh-file work/hitw.stl \
@@ -40,21 +42,24 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
                   --output output/hitw.blend
 ```
 
-4. The last step isn't polished yet; it hasn't been containerized, so it requires installing Blender 3.1 on your machine, installing the required python modules, running the script directly on your machine (not in the container), and it only runs on macOS. Eventually this step and the previous will be combined into a single script that will run in the container.
+4. The last step isn't polished yet; it hasn't been containerized, so it requires installing Blender 3.1 on your machine, installing the required python modules, running the script directly on your machine (not in the container), and it only runs on macOS. Eventually this step and the previous will be combined into a single script that will run in the container.  
+UV map the image onto the model, export and zip the model into a file ready to upload for printing:
 ```
 ./finish_model.py --blender-file output/hitw.blend \
                   --map-image output/hitw.png \
                   --background-image output/lightgrey.png
 ```
-Alternately you can manually open the model in blender, UV map the image onto it, and export it as a Collada file.
+Alternately you can manually open the model in blender, UV map the image onto it, and export it as a Collada file. Zip the collada file and image files into a single archive.
 
 <p align="center"><img src="example_blender3.png" alt="example image"/></p>
 
-5. Compress the collada file and image files into a single zip file and upload to [shapeways](https://www.shapeways.com) for printing. Make sure to select "M" (meters) as the dimensions when uploading.
-
-If you want to really customize the model, stop at step 2, import the stl into your choice of programs and build it out as you wish.
-<p align="center"><img src="example_mesh.png" alt="example image"/></p>
-
+5. Create a [Shapeways](https://www.shapeways.com) account and upload for printing (when manually uploading, make sure to select "M" for meters as the dimensions when uploading). To use the script for automatic uploading, you will need to register to use the [Shapeways API](https://developers.shapeways.com/manage-apps) and get a client ID and secret.
+Upload the archive created from the previous step to Shapeways:
+```
+./upload_model.py --client-id myClientID \
+                  --client-secret myClientSecret \
+                  --model-file output/hitw/hitw.zip
+```
 
 ## Manually Downloading Images/Elevation Data
 Download orthoimages from [The National Map](https://apps.nationalmap.gov/downloader)  

@@ -64,6 +64,7 @@ def finish_model(map_image,
     bsdf = background_tex.node_tree.nodes["Principled BSDF"]
     background_tex.node_tree.links.new(bsdf.inputs['Base Color'], back_tex_img.outputs['Color'])
 
+    log.info("UV mapping textures onto model")
     # Change the view to top/orthographic and project it to a UV map
     layout_screen = bpy.data.workspaces["Layout"].screens[0]
     set_top_view(layout_screen)
@@ -131,6 +132,7 @@ def finish_model(map_image,
     bpy.context.scene.render.filepath = preview_file
     bpy.ops.render.opengl(write_still=True)
 
+    log.info("Exporting model")
     # Export a collada file for printing
     bpy.ops.wm.collada_export(filepath=collada_file)
 
