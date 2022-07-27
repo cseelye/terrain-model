@@ -3,6 +3,8 @@ set -euo pipefail
 CORES=${CORES-$(getconf _NPROCESSORS_ONLN)}
 NAME=${NAME:-terrain-model}
 REPO=${REPO-ghcr.io/cseelye} # Allow this to be empty
+TAG=${TAG-latest}
+
 if [[ -n ${REPO} ]]; then
     IMAGE_NAME=${REPO}/${NAME}
 else
@@ -35,7 +37,7 @@ docker ${BUILD_COMMAND} \
     --build-arg CORES=${CORES} \
     --progress plain \
     --target prod \
-    --tag ${IMAGE_NAME}.prod \
+    --tag ${IMAGE_NAME}.prod:${TAG} \
     .
 )
 
@@ -51,7 +53,7 @@ docker ${BUILD_COMMAND} \
     --build-arg CORES=${CORES} \
     --progress plain \
     --target dev \
-    --tag ${IMAGE_NAME}.dev \
+    --tag ${IMAGE_NAME}.dev:${TAG} \
     .
 )
 
@@ -67,8 +69,8 @@ for stage in base build_gdal build_blender build_py_modules; do
         --build-arg CORES=${CORES} \
         --progress plain \
         --target ${stage} \
-        --tag ${IMAGE_NAME}.${stage} \
+        --tag ${IMAGE_NAME}.${stage}:${TAG} \
         .
 )
 done
-docker image tag ${IMAGE_NAME}.prod ${IMAGE_NAME}
+docker image tag ${IMAGE_NAME}.prod:${TAG} ${IMAGE_NAME}:${TAG}
