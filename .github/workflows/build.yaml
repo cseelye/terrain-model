@@ -2,6 +2,8 @@ name: Build/Test
 
 env:
   image_name: ghcr.io/${{ github.repository }}            # Ex: ghcr.io/cseelye/terrain-model
+  CORES: 2
+
 
 on:
   push:
@@ -22,6 +24,7 @@ jobs:
           else
               echo "::set-output name=publish::false"
           fi
+          echo "::set-output name=date_tag::$(date 'YYYYMMDD')"
 
   build:
     name: Build/publish container images
@@ -36,34 +39,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
       - name: Check out repo
         uses: actions/checkout@v2
 
-      - name: Extract metadata for Docker image
-        id: meta
-        uses: docker/metadata-action@v3.6.2
-        with:
-          images: |
-            ${{ env.image_name }}
-          tags: |
-            type=raw,value={{date 'YYYYMMDD'}}
-          flavor: |
-            latest=true
-
-      - name: test
+      - name: Set variables
+        id: vars
         run: |
-          export
-          echo "tags = ${{ steps.meta.outputs.tags }}"
-          echo "labels = ${{ steps.meta.outputs.labels }}"
+          if [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
+              echo "::set-output name=publish::true"
+          else
+              echo "::set-output name=publish::false"
+          fi
+          echo "::set-output name=date_tag::$(date 'YYYYMMDD')"
 
-      # - name: Build (publish) runtime container
-      #   uses: docker/build-push-action@v2
-      #   with:
-      #     context: .
-      #     target: prod
-      #     push: ${{ needs.setup.outputs.publish }}
-      #     tags: ${{ steps.meta.outputs.tags }}
-      #     labels: ${{ steps.meta.outputs.labels }}
+      - name: Build images
+        run: |
+          make tagged TAG=${{ steps.vars.outputs.date_tag }}
+          make tagged TAG=latest
+
+      - name: Push container images
+        if: steps.vars.outputs.publish
+        run:
+          make push TAG=${{ steps.vars.outputs.date_tag }}
+          make push TAG=latest
