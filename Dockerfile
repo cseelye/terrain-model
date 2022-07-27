@@ -76,6 +76,9 @@ RUN apt-get update && \
 # for the python in use, so to avoid having multiple pythons to manage for
 # the distro default, blender, and GDAL, instead build the one version we want.
 FROM primordial AS build_python
+ARG CORES
+ARG PYTHON_VERSION
+ARG PYTHON_DEST
 RUN apt-get update && \
     apt-get install --yes \
         build-essential=12.8ubuntu1.1 \
