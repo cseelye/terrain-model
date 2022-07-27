@@ -6,7 +6,7 @@ ARG BLENDER_BRANCH="blender-v3.1-release"
 ARG PYTHON_VERSION="3.10.2"
 ARG PYTHON_VERSION_SHORT="3.10"
 # Number CPU cores to limit to while building
-ARG CORES=8
+ARG CORES=4
 
 #
 # Primordial base stage
@@ -24,6 +24,8 @@ ARG PYTHON_VERSION_SHORT
 ARG PROJ_INSTALL_PREFIX=/usr/local
 ARG GDAL_DEST=/build_gdal
 ARG PYTHON_DEST=/build_python3
+ARG BPY_DEST=/opt/bpy/site-packages
+ARG BLENDER_DEST=/opt/blender
 ARG GCC_ARCH=x86_64
 
 # Add .local to the path for pip installed tools
@@ -49,11 +51,11 @@ ENV LANG=en_US.UTF-8 \
 RUN apt-get update && \
     apt-get install --yes \
         ca-certificates \
-        curl=7.68.0-1ubuntu2.11 \
-        gnupg=2.2.19-3ubuntu2.1 \
+        curl=7.68.0-1ubuntu2.12 \
+        gnupg=2.2.19-3ubuntu2.2 \
         libreadline5=5.2+dfsg-3build3 \
         libncurses6=6.2-0ubuntu2 \
-        libssl1.1=1.1.1f-1ubuntu2.13 \
+        libssl1.1=1.1.1f-1ubuntu2.16 \
         libsqlite3-0=3.31.1-4ubuntu0.3 \
         libtk8.6=8.6.10-1 \
         libgdbm6=1.18.1-5 \
@@ -80,7 +82,7 @@ RUN apt-get update && \
         checkinstall=1.6.2+git20170426.d24a630-2ubuntu1 \
         libreadline-gplv2-dev=5.2+dfsg-3build3 \
         libncursesw5-dev=6.2-0ubuntu2 \
-        libssl-dev=1.1.1f-1ubuntu2.13 \
+        libssl-dev=1.1.1f-1ubuntu2.16 \
         libsqlite3-dev=3.31.1-4ubuntu0.3 \
         tk-dev=8.6.9+1 \
         libgdbm-dev=1.18.1-5 \
@@ -91,8 +93,8 @@ RUN apt-get update && \
         libgdbm-compat-dev=1.18.1-5
 RUN curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar -xz && \
     cd Python-${PYTHON_VERSION} && \
-    ./configure --enable-optimizations --prefix=${PYTHON_DEST} && \
-    make -j${CORES} && \
+    ./configure --prefix=${PYTHON_DEST} && \
+    make -j${CORES} EXTRA_CFLAGS='-g0 -Os' LDFLAGS='-s' && \
     make install
 RUN ${PYTHON_DEST}/bin/python3 -m ensurepip --upgrade --default-pip && \
     ${PYTHON_DEST}/bin/python3 -m pip install \
@@ -100,7 +102,7 @@ RUN ${PYTHON_DEST}/bin/python3 -m ensurepip --upgrade --default-pip && \
         --upgrade \
         --compile \
         pip wheel
-# Fix the shebangs for when we relocate this python install
+# Fix the shebangs for when we relocate this python install to /usr
 RUN for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python script" | cut -d: -f1); do sed "s|${PYTHON_DEST}|/usr|" -i ${f}; done
 
 #
@@ -123,14 +125,14 @@ FROM base AS build_py_modules
 RUN apt-get update && \
     apt-get install --yes build-essential
 COPY requirements.txt /tmp/
-# https://towardsdatascience.com/how-to-shrink-numpy-scipy-pandas-and-matplotlib-for-your-data-product-4ec8d7e86ee4
-RUN CLFAGS='-g0 -Wl -I/usr/include:/usr/local/include -L/usr/lib:/usr/local/lib' pip3 install \
+# Some inspiration from https://towardsdatascience.com/how-to-shrink-numpy-scipy-pandas-and-matplotlib-for-your-data-product-4ec8d7e86ee4
+RUN CFLAGS='-g0 -Os' LD_FLAGS='-s' pip3 -v install \
         --no-cache-dir \
         --compile \
         --user \
         $(grep numpy /tmp/requirements.txt | head -n 1) \
-        --global-option=build_ext \
-        --install-option="-j${CORES}"
+        --global-option="build_ext" \
+        --global-option="-j ${CORES}"
 RUN pip3 install \
         --no-cache-dir \
         --upgrade \
@@ -155,9 +157,9 @@ RUN apt-get update && \
         build-essential=12.8ubuntu1.1 \
         ca-certificates \
         cmake=3.16.3-1ubuntu1 \
-        curl=7.68.0-1ubuntu2.11 \
-        git=1:2.25.1-1ubuntu3.4 \
-        gnupg=2.2.19-3ubuntu2.1 \
+        curl=7.68.0-1ubuntu2.12 \
+        git=1:2.25.1-1ubuntu3.5 \
+        gnupg=2.2.19-3ubuntu2.2 \
         libtool=2.4.6-14 \
         make=4.2.1-1.2 \
         pkg-config=0.29.1-0ubuntu4 \
@@ -179,7 +181,7 @@ RUN apt-get install --yes \
         libopenjp2-7-dev=2.3.1-1ubuntu4.20.04.1 \
         libpng-dev=1.6.37-2 \
         libpq-dev=12.11-0ubuntu0.20.04.1 \
-        libssl-dev=1.1.1f-1ubuntu2.13 \
+        libssl-dev=1.1.1f-1ubuntu2.16 \
         libwebp-dev=0.6.1-2ubuntu0.20.04.1 \
         libxerces-c-dev=3.2.2+debian-1build3 \
         libzstd-dev=1.4.4+dfsg-3ubuntu0.1 \
@@ -198,14 +200,13 @@ RUN /build-gdal
 # Blender build stage
 #
 FROM base AS build_blender
-ENV BLENDER_BRANCH=${BLENDER_BRANCH}
 
 # Install build tools and other required tools/libraries
 RUN apt-get update && \
     apt-get install --yes \
         build-essential=12.8ubuntu1.1 \
         cmake=3.16.3-1ubuntu1 \
-        git=1:2.25.1-1ubuntu3.4 \
+        git=1:2.25.1-1ubuntu3.5 \
         libx11-dev=2:1.6.9-2ubuntu1.2 \
         libxxf86vm-dev=1:1.1.4-1build1 \
         libxcursor-dev=1:1.2.0-2 \
@@ -219,8 +220,8 @@ RUN apt-get update && \
         wget=1.20.3-1ubuntu2 \
         xz-utils=5.2.4-1ubuntu1.1 \
     && \
-    git config --global user.email "buildscript@blender-build.invalid" && git config --global user.name "Build Script" && \
-    apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    git config --global user.email "buildscript@blender-build.invalid" && git config --global user.name "Build Script"
 
 # To speed up debugging/iteration on the container image, checkout the blender
 # source in your build context and uncomment the COPY line to copy it into the
@@ -231,10 +232,23 @@ RUN apt-get update && \
 #   svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/tags/blender-3.1-release/lib/linux_centos7_x86_64 container_build/blender-build/lib/linux_centos7_x86_64
 #COPY container_build/ /
 
-# Get the blender source and build/install the bpy python module.
-# This creates a "user" install which is easy to copy from /root/.local
+# Get the blender source and build/install the bpy python module and blender app.
+# This creates a "user" install of the python modules which is easy to copy from /root/.local
 COPY container_build/build-bpy /
 RUN /build-bpy
+
+# Install python modules into blender's python
+COPY requirements.txt /tmp/requirements.txt
+RUN ${BLENDER_DEST}/*/python/bin/python* -m ensurepip && \
+    ${BLENDER_DEST}/*/python/bin/python* -m pip install \
+        --disable-pip-version-check \
+        --no-cache-dir \
+        --upgrade \
+            pip wheel && \
+    ${BLENDER_DEST}/*/python/bin/python* -m pip install \
+        --no-cache-dir \
+        --upgrade \
+        --requirement /tmp/requirements.txt
 
 
 #
@@ -248,7 +262,7 @@ LABEL org.opencontainers.image.description="terrain-model runtime container"
 # Install runtime dependencies for PROJ and GDAL
 RUN apt-get update && \
     apt-get install --yes \
-        libcurl4=7.68.0-1ubuntu2.11 \
+        libcurl4=7.68.0-1ubuntu2.12 \
         libexpat1=2.2.9-1ubuntu0.4 \
         libgeos-3.8.0=3.8.0-1build1 \
         libgeos-c1v5=3.8.0-1build1 \
@@ -257,7 +271,7 @@ RUN apt-get update && \
         libpng16-16=1.6.37-2 \
         libpq5=12.11-0ubuntu0.20.04.1 \
         libsqlite3-0=3.31.1-4ubuntu0.3 \
-        libssl1.1=1.1.1f-1ubuntu2.13 \
+        libssl1.1=1.1.1f-1ubuntu2.16 \
         libtiff5=4.1.0+git191117-2ubuntu0.20.04.3 \
         libwebp6=0.6.1-2ubuntu0.20.04.1 \
         libxerces-c3.2=3.2.2+debian-1build3 \
@@ -274,8 +288,12 @@ RUN apt-get update && \
         libxrender1=1:0.9.10-1 \
         libgl1=1.3.2-1~ubuntu0.20.04.2 \
         libgomp1=10.3.0-1ubuntu1~20.04 \
+        libxi6=2:1.7.10-0ubuntu1 \
         opencollada-dev=0.1.0~20180719.619d942+dfsg0-2build1 \
         openscad=2019.05-3ubuntu5 \
+        # openbox=3.6.1-9ubuntu0.20.04.1 \
+        # xorg=1:7.7+19ubuntu14 \
+        xvfb=2:1.20.13-1ubuntu1~20.04.3 \
     && \
     apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -283,13 +301,22 @@ RUN apt-get update && \
 COPY --from=build_gdal ${GDAL_DEST} /
 
 # Copy the python modules from the blender build stage
-COPY --from=build_blender /root/.local /usr/lib/python${PYTHON_VERSION_SHORT}/
+COPY --from=build_blender ${BPY_DEST} /usr/lib/python${PYTHON_VERSION_SHORT}/site-packages
+
+# Copy blender app from the blender build stage
+COPY --from=build_blender ${BLENDER_DEST} /opt/blender
 
 # Copy the python modules from the python module build stage
 COPY --from=build_py_modules /root/.local /usr/
 
 # Run ldconfig to make sure shared libraries are configured correctly
 RUN ldconfig
+
+ENV DISPLAY=:0
+ENV PATH="${PATH}:/opt/blender:/opt/terrain-model"
+
+# Copy the scripts into /opt/terrain-model
+COPY *.py gtm* LICENSE /opt/terrain-model/
 
 
 #
@@ -306,7 +333,7 @@ RUN apt-get update && \
     apt-get install --yes \
         ack=3.3.1-1 \
         build-essential=12.8ubuntu1.1 \
-        git=1:2.25.1-1ubuntu3.4 \
+        git=1:2.25.1-1ubuntu3.5 \
         tree=1.8.0-1 \
         vim=2:8.1.2269-1ubuntu5.7 \
         && \

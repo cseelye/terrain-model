@@ -5,7 +5,12 @@ export BLENDER_BRANCH=${BLENDER_BRANCH-"blender-v3.1-release"}
 export BLENDER_LIB_BRANCH=${BLENDER_LIB_BRANCH-"$(echo ${BLENDER_BRANCH} | tr -d v)"}
 export CORES=${CORES-8}
 export WORK_DIR=${BLENDER_WORK_DIR-/blender-build}
+export BLENDER_DEST=${BLENDER_DEST-/opt/blender}
+export BPY_DEST=${BPY_DEST-/opt/bpy/site-packages}
+
+echo "${0} ENVIRONMENT"
 export
+echo "================"
 
 # Get the blender source
 # The blender repos can be very slow sometimes and disconnect during cloning, so wrap the commands in a loop to keep trying
@@ -29,26 +34,44 @@ if [[ ! -e ${WORK_DIR}/lib ]]; then
     done
     popd
 fi
-echo "libs branch: $(svn info --show-item url ${WORK_DIR}/lib/linux_centos7_x86_64)"
+echo ">>> libs branch: $(svn info --show-item url ${WORK_DIR}/lib/linux_centos7_x86_64)"
 
 if [[ ! -e ${WORK_DIR}/blender-src ]]; then
     time until git clone --depth 1 --branch ${BLENDER_BRANCH} --single-branch https://git.blender.org/blender.git ${WORK_DIR}/blender-src; do
         rm -rf ${WORK_DIR}/blender-src
     done
 fi
-echo "source branch: $(git -C ${WORK_DIR}/blender-src rev-parse --abbrev-ref HEAD)"
+echo ">>> source branch: $(git -C ${WORK_DIR}/blender-src rev-parse --abbrev-ref HEAD)"
 
-# Build blender python library
+export NPROCS=${CORES}
+
 pushd ${WORK_DIR}/blender-src
 time make update
-time make -j${CORES} bpy
+# Configure build for blender python library
+cmake \
+    -C"${WORK_DIR}/blender-src/build_files/cmake/config/bpy_module.cmake" \
+    -H"${WORK_DIR}/blender-src" \
+    -B"${WORK_DIR}/build_linux_bpy" \
+    -DCMAKE_BUILD_TYPE_INIT:STRING=MinSizeRel \
+    -DPYTHON_SITE_PACKAGES=${BPY_DEST}
+
+# Configure build for blender app
+cmake \
+    -C"${WORK_DIR}/blender-src/build_files/cmake/config/blender_release.cmake" \
+    -H"${WORK_DIR}/blender-src" \
+    -B"${WORK_DIR}/build_linux_release" \
+    -DCMAKE_BUILD_TYPE_INIT:STRING=MinSizeRel \
+    -DCMAKE_INSTALL_PREFIX=${BLENDER_DEST}
 popd
 
-# Install bpy into /root/.local - this creates a "user" install for the root user instead of a system install
+# Build python library
+echo ">>> Building bpy module"
 pushd ${WORK_DIR}/build_linux_bpy
-mkdir --parents /root/.local
-sed -e 's|PYTHON_SITE_PACKAGES:FILEPATH=.*|PYTHON_SITE_PACKAGES:FILEPATH=/root/.local|' -i ${WORK_DIR}/build_linux_bpy/CMakeCache.txt
-make -j${CORES} install
+time make -j${CORES} install
 popd
 
-rm -rf ${WORK_DIR} ${0}
+# Build blender app
+echo ">>> Building blender"
+pushd ${WORK_DIR}/build_linux_release
+time make -j${CORES} install
+popd

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
+CORES=${CORES-$(getconf _NPROCESSORS_ONLN)}
 NAME=${NAME:-terrain-model}
 REPO=${REPO-ghcr.io/cseelye} # Allow this to be empty
 if [[ -n ${REPO} ]]; then
@@ -10,9 +10,9 @@ else
 fi
 USE_BUILDX=${USE_BUILDX-0}
 if [[ ${USE_BUILDX} -eq 1 ]]; then
-    DOCKER_COMMAND="buildx"
+    BUILD_COMMAND="buildx build --load"
 else
-    DOCKER_COMMAND="image"
+    BUILD_COMMAND="image build"
 fi
 
 for stage in base build_gdal build_blender build_py_modules; do
@@ -26,11 +26,13 @@ fi
 
 (
 set -x
-docker ${DOCKER_COMMAND} build \
+docker ${BUILD_COMMAND} \
     --cache-from ${IMAGE_NAME}.base \
     --cache-from ${IMAGE_NAME}.build_gdal \
     --cache-from ${IMAGE_NAME}.build_blender \
     --cache-from ${IMAGE_NAME}.build_py_modules \
+    --cache-from ${IMAGE_NAME}.prod \
+    --build-arg CORES=${CORES} \
     --progress plain \
     --target prod \
     --tag ${IMAGE_NAME}.prod \
@@ -39,11 +41,14 @@ docker ${DOCKER_COMMAND} build \
 
 (
 set -x
-docker ${DOCKER_COMMAND} build \
+docker ${BUILD_COMMAND} \
     --cache-from ${IMAGE_NAME}.base \
     --cache-from ${IMAGE_NAME}.build_gdal \
     --cache-from ${IMAGE_NAME}.build_blender \
     --cache-from ${IMAGE_NAME}.build_py_modules \
+    --cache-from ${IMAGE_NAME}.prod \
+    --cache-from ${IMAGE_NAME}.dev \
+    --build-arg CORES=${CORES} \
     --progress plain \
     --target dev \
     --tag ${IMAGE_NAME}.dev \
@@ -54,12 +59,12 @@ docker ${DOCKER_COMMAND} build \
 for stage in base build_gdal build_blender build_py_modules; do
 (
     set -x
-    docker ${DOCKER_COMMAND} build \
+    docker ${BUILD_COMMAND} \
         --cache-from ${IMAGE_NAME}.base \
         --cache-from ${IMAGE_NAME}.build_gdal \
         --cache-from ${IMAGE_NAME}.build_blender \
         --cache-from ${IMAGE_NAME}.build_py_modules \
-        --cache-from ${IMAGE_NAME}.prod \
+        --build-arg CORES=${CORES} \
         --progress plain \
         --target ${stage} \
         --tag ${IMAGE_NAME}.${stage} \
