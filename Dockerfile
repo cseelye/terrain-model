@@ -15,7 +15,6 @@ ARG GDAL_DEST=/build_gdal
 ARG PYTHON_DEST=/build_python3
 ARG BPY_DEST=/opt/bpy/site-packages
 ARG BLENDER_DEST=/opt/blender
-ARG GCC_ARCH=x86_64
 
 
 #
@@ -23,18 +22,6 @@ ARG GCC_ARCH=x86_64
 # Shared base layers for all other stages
 #
 FROM ubuntu:20.04 AS primordial
-# Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
-ARG CORES
-ARG GCC_ARCH
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
 
@@ -87,14 +74,7 @@ RUN apt-get update && \
 # the distro default, blender, and GDAL, instead build the one version we want.
 FROM primordial AS build_python
 # Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
 ARG CORES
-ARG GCC_ARCH
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
 ARG PYTHON_DEST
 ARG PYTHON_VERSION
 ARG PYTHON_VERSION_SHORT
@@ -134,17 +114,7 @@ RUN for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python 
 #
 FROM primordial AS base
 # Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
-ARG CORES
-ARG GCC_ARCH
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
 ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 COPY --from=build_python ${PYTHON_DEST} /usr/
 RUN ldconfig
@@ -158,17 +128,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 # This will install/build python modules as a "user" install which is easy to copy from /root/.local to other layers
 FROM base AS build_py_modules
 # Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
 ARG CORES
-ARG GCC_ARCH
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 RUN apt-get update && \
     apt-get install --yes build-essential
@@ -196,17 +156,10 @@ RUN pip3 install \
 #
 FROM base AS build_gdal
 # Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
 ARG CORES
-ARG GCC_ARCH
 ARG GDAL_DEST
 ARG GDAL_VERSION
 ARG PROJ_INSTALL_PREFIX
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 # Install build tools
 RUN apt-get update && \
@@ -265,13 +218,6 @@ ARG BLENDER_BRANCH
 ARG BLENDER_DEST
 ARG BPY_DEST
 ARG CORES
-ARG GCC_ARCH
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 # Install build tools and other required tools/libraries
 RUN apt-get update && \
@@ -331,16 +277,9 @@ LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model runtime container"
 # Bring in build args
-ARG BLENDER_BRANCH
 ARG BLENDER_DEST
 ARG BPY_DEST
-ARG CORES
-ARG GCC_ARCH
 ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
 ARG PYTHON_VERSION_SHORT
 
 # Install runtime dependencies for PROJ and GDAL
@@ -411,18 +350,6 @@ FROM prod AS dev
 LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model development container"
-# Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
-ARG CORES
-ARG GCC_ARCH
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
