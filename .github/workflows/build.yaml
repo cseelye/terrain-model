@@ -33,7 +33,7 @@ jobs:
           else
               echo "::set-output name=publish::false"
           fi
-          echo "::set-output name=date_tag::$(date 'YYYYMMDD')"
+          echo "::set-output name=date_tag::$(date +'%Y%m%d')"
 
       - name: test vars
         run: |
