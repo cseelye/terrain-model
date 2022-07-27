@@ -11,25 +11,8 @@ on:
       - '*'
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      publish: ${{ steps.setvars.outputs.publish }}
-    steps:
-      - name: Set variables
-        id: setvars
-        run: |
-          if [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
-              echo "::set-output name=publish::true"
-          else
-              echo "::set-output name=publish::false"
-          fi
-          echo "::set-output name=date_tag::$(date 'YYYYMMDD')"
-
   build:
     name: Build/publish container images
-    needs:
-      - setup
     runs-on: ubuntu-latest
     steps:
       - name: Log in to Github Container Registry
@@ -52,13 +35,18 @@ jobs:
           fi
           echo "::set-output name=date_tag::$(date 'YYYYMMDD')"
 
-      - name: Build images
+      - name: test vars
         run: |
-          make tagged TAG=${{ steps.vars.outputs.date_tag }}
-          make tagged TAG=latest
+          echo "date_tag = ${{ steps.vars.outputs.date_tag }}"
+          echo "publish = ${{ steps.vars.outputs.publish }}"
 
-      - name: Push container images
-        if: steps.vars.outputs.publish
-        run:
-          make push TAG=${{ steps.vars.outputs.date_tag }}
-          make push TAG=latest
+      # - name: Build images
+      #   run: |
+      #     make tagged TAG=${{ steps.vars.outputs.date_tag }}
+      #     make tagged TAG=latest
+
+      # - name: Push container images
+      #   if: steps.vars.outputs.publish
+      #   run:
+      #     make push TAG=${{ steps.vars.outputs.date_tag }}
+      #     make push TAG=latest
