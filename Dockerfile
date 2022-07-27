@@ -8,25 +8,35 @@ ARG PYTHON_VERSION_SHORT="3.10"
 # Number CPU cores to limit to while building
 ARG CORES=4
 
-#
-# Primordial base stage
-# Shared base layers for all other stages
-#
-FROM ubuntu:20.04 AS primordial
 
-SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
-
-ARG CORES
-ARG GDAL_VERSION
-ARG BLENDER_BRANCH
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
+# Internal variables used across stages
 ARG PROJ_INSTALL_PREFIX=/usr/local
 ARG GDAL_DEST=/build_gdal
 ARG PYTHON_DEST=/build_python3
 ARG BPY_DEST=/opt/bpy/site-packages
 ARG BLENDER_DEST=/opt/blender
 ARG GCC_ARCH=x86_64
+
+
+#
+# Primordial base stage
+# Shared base layers for all other stages
+#
+FROM ubuntu:20.04 AS primordial
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+
+SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
 
 # Add .local to the path for pip installed tools
 ENV PATH="${PATH}:/root/.local/bin"
@@ -76,9 +86,19 @@ RUN apt-get update && \
 # for the python in use, so to avoid having multiple pythons to manage for
 # the distro default, blender, and GDAL, instead build the one version we want.
 FROM primordial AS build_python
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
 ARG CORES
-ARG PYTHON_VERSION
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
 ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+
 RUN apt-get update && \
     apt-get install --yes \
         build-essential=12.8ubuntu1.1 \
@@ -113,6 +133,19 @@ RUN for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python 
 # Shared layers all other stages share (primordial layers plus python runtime)
 #
 FROM primordial AS base
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+
 COPY --from=build_python ${PYTHON_DEST} /usr/
 RUN ldconfig
 # Do not warn about running pip as root
@@ -124,6 +157,18 @@ ENV PIP_ROOT_USER_ACTION=ignore
 #
 # This will install/build python modules as a "user" install which is easy to copy from /root/.local to other layers
 FROM base AS build_py_modules
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
 
 RUN apt-get update && \
     apt-get install --yes build-essential
@@ -150,6 +195,18 @@ RUN pip3 install \
 # GDAL build stage
 #
 FROM base AS build_gdal
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
 
 # Install build tools
 RUN apt-get update && \
@@ -203,6 +260,18 @@ RUN /build-gdal
 # Blender build stage
 #
 FROM base AS build_blender
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
 
 # Install build tools and other required tools/libraries
 RUN apt-get update && \
@@ -261,6 +330,18 @@ FROM base AS prod
 LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model runtime container"
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
 
 # Install runtime dependencies for PROJ and GDAL
 RUN apt-get update && \
@@ -330,6 +411,18 @@ FROM prod AS dev
 LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model development container"
+# Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BPY_DEST
+ARG CORES
+ARG GCC_ARCH
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
