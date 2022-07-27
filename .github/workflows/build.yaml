@@ -1,7 +1,6 @@
 name: Build/Test
 
 env:
-  image_name: ghcr.io/${{ github.repository }}            # Ex: ghcr.io/cseelye/terrain-model
   CORES: 2
 
 
@@ -35,18 +34,13 @@ jobs:
           fi
           echo "::set-output name=date_tag::$(date +'%Y%m%d')"
 
-      - name: test vars
+      - name: Build container images
         run: |
-          echo "date_tag = ${{ steps.vars.outputs.date_tag }}"
-          echo "publish = ${{ steps.vars.outputs.publish }}"
+          make tagged TAG=${{ steps.vars.outputs.date_tag }}
+          make tagged TAG=latest
 
-      # - name: Build images
-      #   run: |
-      #     make tagged TAG=${{ steps.vars.outputs.date_tag }}
-      #     make tagged TAG=latest
-
-      # - name: Push container images
-      #   if: steps.vars.outputs.publish
-      #   run:
-      #     make push TAG=${{ steps.vars.outputs.date_tag }}
-      #     make push TAG=latest
+      - name: Push container images
+        if: steps.vars.outputs.publish
+        run:
+          make push TAG=${{ steps.vars.outputs.date_tag }}
+          make push TAG=latest
