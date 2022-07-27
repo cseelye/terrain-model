@@ -36,7 +36,7 @@ jobs:
 
       - name: Build container images
         run: |
-          make tagged TAG=${{ steps.vars.outputs.date_tag }}
+          make tagged TAG=${{ steps.vars.outputs.date_tag }} USE_BUILDX=1
           make tagged TAG=latest
 
       - name: Push container images
