@@ -102,20 +102,8 @@ ARG GDAL_DEST
 ARG GDAL_VERSION
 ARG PROJ_INSTALL_PREFIX
 
-RUN export CORES=$(getconf _NPROCESSORS_ONLN) && \
-    curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar -xz && \
-    cd Python-${PYTHON_VERSION} && \
-    ./configure --prefix=${PYTHON_DEST} && \
-    make -j${CORES} EXTRA_CFLAGS='-g0 -Os' LDFLAGS='-s' && \
-    make install
-RUN ${PYTHON_DEST}/bin/python3 -m ensurepip --upgrade --default-pip && \
-    ${PYTHON_DEST}/bin/python3 -m pip install \
-        --no-cache-dir \
-        --upgrade \
-        --compile \
-        pip wheel
-# Fix the shebangs for when we relocate this python install to /usr
-RUN for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python script" | cut -d: -f1); do sed "s|${PYTHON_DEST}|/usr|" -i ${f}; done
+COPY container_build/build-python /
+RUN /build-python
 
 #
 # Base stage
@@ -162,15 +150,8 @@ ARG GDAL_DEST
 ARG GDAL_VERSION
 ARG PROJ_INSTALL_PREFIX
 
-# Some inspiration from https://towardsdatascience.com/how-to-shrink-numpy-scipy-pandas-and-matplotlib-for-your-data-product-4ec8d7e86ee4
-RUN export CORES=$(getconf _NPROCESSORS_ONLN) && \
-    CFLAGS='-g0 -Os' LD_FLAGS='-s' pip3 -v install \
-        --no-cache-dir \
-        --compile \
-        --user \
-        $(grep numpy /tmp/requirements.txt | head -n 1) \
-        --global-option="build_ext" \
-        --global-option="-j ${CORES}"
+COPY container_build/build-numpy /
+RUN /build-numpy
 RUN pip3 install \
         --no-cache-dir \
         --upgrade \

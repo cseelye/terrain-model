@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export CORES=$(getconf _NPROCESSORS_ONLN)
+export PYTHON_VERSION=${PYTHON_VERSION}
+export PYTHON_DEST=${PYTHON_DEST-/build_python3}
+
+echo "${0} ENVIRONMENT"
+export
+echo "================"
+
+set -x
+
+# Get source and build python
+curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar -xz
+cd Python-${PYTHON_VERSION}
+./configure --prefix=${PYTHON_DEST}
+make -j${CORES} EXTRA_CFLAGS='-g0 -Os' LDFLAGS='-s'
+make install
+
+# Install pip and wheel
+${PYTHON_DEST}/bin/python3 -m ensurepip --upgrade --default-pip
+${PYTHON_DEST}/bin/python3 -m pip install \
+    --no-cache-dir \
+    --upgrade \
+    --compile \
+    pip wheel
+
+# Fix the shebangs for when we relocate this python install to /usr
+for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python script" | cut -d: -f1); do
+    sed "s|${PYTHON_DEST}|/usr|" -i ${f}
+done

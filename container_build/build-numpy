@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Some inspiration from https://towardsdatascience.com/how-to-shrink-numpy-scipy-pandas-and-matplotlib-for-your-data-product-4ec8d7e86ee4
+
+export CORES=$(getconf _NPROCESSORS_ONLN)
+export CFLAGS='-g0 -Os'
+export LD_FLAGS='-s'
+
+echo "${0} ENVIRONMENT"
+export
+echo "================"
+
+set -x
+
+pip3 -v install \
+    --no-cache-dir \
+    --compile \
+    --user \
+    $(grep numpy /tmp/requirements.txt | head -n 1) \
+    --global-option="build_ext" \
+    --global-option="-j ${CORES}"
