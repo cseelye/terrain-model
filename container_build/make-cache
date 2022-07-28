@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+NAME=${NAME:-terrain-model}
+REPO=${REPO:-ghcr.io/cseelye}
+TAG=${TAG-latest}
+CACHE_REPO=${CACHE_REPO:-cseelye}
+
+if [[ -n ${REPO} ]]; then
+    IMAGE_NAME=${REPO}/${NAME}
+else
+    IMAGE_NAME=${NAME}
+fi
+
+if [[ -n ${CACHE_REPO} ]]; then
+    CACHE_IMAGE_NAME=${CACHE_REPO}/${NAME}
+elif [[ -n ${REPO} ]]; then
+    CACHE_IMAGE_NAME=${REPO}:${NAME}
+else
+    echo "CACHE_REPO and REPO cannot both be empty"
+    exit 1
+fi
+
+# This build process uses buildx remote layer caching, so docker must be logged into the registry being used with permissions to push
+
+# Explicitly build/tag the intermediate layers
+for stage in base build_py_modules build_gdal build_blender; do
+(
+    set -x
+    docker buildx build \
+        --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
+        --cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max \
+        --progress plain \
+        --target ${stage} \
+        --tag ${IMAGE_NAME}.${stage}:${TAG} \
+        .
+)
+done
+
+# Build runtime image
+(
+stage=prod
+set -x
+docker buildx build \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.base-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_blender-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
+    --cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max \
+    --progress plain \
+    --target ${stage} \
+    --tag ${IMAGE_NAME}:${TAG} \
+    .
+)
+
+# Build dev image
+(
+stage=dev
+set -x
+docker buildx build \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.base-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_blender-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.prod-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
+    --cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max \
+    --progress plain \
+    --target ${stage} \
+    --tag ${IMAGE_NAME}.${stage}:${TAG} \
+    .
+)

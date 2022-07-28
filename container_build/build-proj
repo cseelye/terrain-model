@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CORES=${CORES-8}
+CORES=${CORES-$(getconf _NPROCESSORS_ONLN)}
 PROJ_INSTALL_PREFIX=${PROJ_INSTALL_PREFIX-/usr/local}
 GCC_ARCH=${GCC_ARCH-$(uname -m)}
 DEST_DIR=${GDAL_DEST-/build_gdal}

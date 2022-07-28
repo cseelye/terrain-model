@@ -2,11 +2,11 @@
 ARG GDAL_VERSION="3.5.0"
 # Blender version to use
 ARG BLENDER_BRANCH="blender-v3.1-release"
+ARG BLENDER_VERSION_SHORT="3.1"
 # Python version to use - this must match what blender is expecting
+# https://svn.blender.org/svnroot/bf-blender/tags/blender-3.1-release/lib/linux_centos7_x86_64/python/include/python3.10/patchlevel.h
 ARG PYTHON_VERSION="3.10.2"
 ARG PYTHON_VERSION_SHORT="3.10"
-# Number CPU cores to limit to while building
-ARG CORES=4
 
 
 # Internal variables used across stages
@@ -73,11 +73,6 @@ RUN apt-get update && \
 # for the python in use, so to avoid having multiple pythons to manage for
 # the distro default, blender, and GDAL, instead build the one version we want.
 FROM primordial AS build_python
-# Bring in build args
-ARG CORES
-ARG PYTHON_DEST
-ARG PYTHON_VERSION
-ARG PYTHON_VERSION_SHORT
 
 RUN apt-get update && \
     apt-get install --yes \
@@ -94,7 +89,21 @@ RUN apt-get update && \
         libffi-dev=3.3-4 \
         liblzma-dev=5.2.4-1ubuntu1.1 \
         libgdbm-compat-dev=1.18.1-5
-RUN curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar -xz && \
+
+# Bring in build args. Use same list of ARG in every layer so build cache is the same
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BLENDER_VERSION_SHORT
+ARG BPY_DEST
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+
+RUN export CORES=$(getconf _NPROCESSORS_ONLN) && \
+    curl -LSsf https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar -xz && \
     cd Python-${PYTHON_VERSION} && \
     ./configure --prefix=${PYTHON_DEST} && \
     make -j${CORES} EXTRA_CFLAGS='-g0 -Os' LDFLAGS='-s' && \
@@ -114,7 +123,16 @@ RUN for f in $(find ${PYTHON_DEST}/bin/ -type f -exec file {} \; | grep "Python 
 #
 FROM primordial AS base
 # Bring in build args
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BLENDER_VERSION_SHORT
+ARG BPY_DEST
 ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
 
 COPY --from=build_python ${PYTHON_DEST} /usr/
 RUN ldconfig
@@ -127,14 +145,26 @@ ENV PIP_ROOT_USER_ACTION=ignore
 #
 # This will install/build python modules as a "user" install which is easy to copy from /root/.local to other layers
 FROM base AS build_py_modules
-# Bring in build args
-ARG CORES
 
 RUN apt-get update && \
     apt-get install --yes build-essential
 COPY requirements.txt /tmp/
+
+# Bring in build args. Use same list of ARG in every layer so build cache is the same
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BLENDER_VERSION_SHORT
+ARG BPY_DEST
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+
 # Some inspiration from https://towardsdatascience.com/how-to-shrink-numpy-scipy-pandas-and-matplotlib-for-your-data-product-4ec8d7e86ee4
-RUN CFLAGS='-g0 -Os' LD_FLAGS='-s' pip3 -v install \
+RUN export CORES=$(getconf _NPROCESSORS_ONLN) && \
+    CFLAGS='-g0 -Os' LD_FLAGS='-s' pip3 -v install \
         --no-cache-dir \
         --compile \
         --user \
@@ -155,11 +185,6 @@ RUN pip3 install \
 # GDAL build stage
 #
 FROM base AS build_gdal
-# Bring in build args
-ARG CORES
-ARG GDAL_DEST
-ARG GDAL_VERSION
-ARG PROJ_INSTALL_PREFIX
 
 # Install build tools
 RUN apt-get update && \
@@ -203,8 +228,21 @@ RUN apt-get install --yes \
 # Get numpy so that gdal_array support gets built
 COPY --from=build_py_modules /root/.local /usr/
 
-# Get the source and build PROJ and GDAL
 COPY container_build/build-proj container_build/build-gdal /
+
+# Bring in build args. Use same list of ARG in every layer so build cache is the same
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BLENDER_VERSION_SHORT
+ARG BPY_DEST
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+
+# Get the source and build PROJ and GDAL
 RUN /build-proj
 RUN /build-gdal
 
@@ -213,11 +251,6 @@ RUN /build-gdal
 # Blender build stage
 #
 FROM base AS build_blender
-# Bring in build args
-ARG BLENDER_BRANCH
-ARG BLENDER_DEST
-ARG BPY_DEST
-ARG CORES
 
 # Install build tools and other required tools/libraries
 RUN apt-get update && \
@@ -250,23 +283,25 @@ RUN apt-get update && \
 #   svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/tags/blender-3.1-release/lib/linux_centos7_x86_64 container_build/blender-build/lib/linux_centos7_x86_64
 #COPY container_build/ /
 
-# Get the blender source and build/install the bpy python module and blender app.
-# This creates a "user" install of the python modules which is easy to copy from /root/.local
 COPY container_build/build-bpy /
+
+# Bring in build args. Use same list of ARG in every layer so build cache is the same
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BLENDER_VERSION_SHORT
+ARG BPY_DEST
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
+
+# Get the blender source and build/install the bpy python module and blender app.
 RUN /build-bpy
 
 # Install python modules into blender's python
-COPY requirements.txt /tmp/requirements.txt
-RUN ${BLENDER_DEST}/*/python/bin/python* -m ensurepip && \
-    ${BLENDER_DEST}/*/python/bin/python* -m pip install \
-        --disable-pip-version-check \
-        --no-cache-dir \
-        --upgrade \
-            pip wheel && \
-    ${BLENDER_DEST}/*/python/bin/python* -m pip install \
-        --no-cache-dir \
-        --upgrade \
-        --requirement /tmp/requirements.txt
+COPY --from=build_py_modules /root/.local ${BLENDER_DEST}/${BLENDER_VERSION_SHORT}/python/lib/python3.10/site-packages/
 
 
 #
@@ -276,11 +311,6 @@ FROM base AS prod
 LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model runtime container"
-# Bring in build args
-ARG BLENDER_DEST
-ARG BPY_DEST
-ARG GDAL_DEST
-ARG PYTHON_VERSION_SHORT
 
 # Install runtime dependencies for PROJ and GDAL
 RUN apt-get update && \
@@ -319,6 +349,18 @@ RUN apt-get update && \
         xvfb=2:1.20.13-1ubuntu1~20.04.3 \
     && \
     apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Bring in build args. Use same list of ARG in every layer so build cache is the same
+ARG BLENDER_BRANCH
+ARG BLENDER_DEST
+ARG BLENDER_VERSION_SHORT
+ARG BPY_DEST
+ARG PYTHON_DEST
+ARG PYTHON_VERSION
+ARG PYTHON_VERSION_SHORT
+ARG GDAL_DEST
+ARG GDAL_VERSION
+ARG PROJ_INSTALL_PREFIX
 
 # Copy the PROJ/GDAL modules from the gdal build stage
 COPY --from=build_gdal ${GDAL_DEST} /

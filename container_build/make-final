@@ -30,8 +30,8 @@ for target in $(ggrep -oP "FROM \S+ AS (\S+)" Dockerfile | awk '{print $4}' | tr
         --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache"
 done
 
-# Explicitly build/tag all targets
-for target in $(ggrep -oP "FROM \S+ AS (\S+)" Dockerfile | awk '{print $4}' | tr '\n' ' ' | tac -s ' '); do
+# Build and tag the runtime and dev containers
+for target in prod dev; do
 (
     fullname=${IMAGE_NAME}.${target}:${TAG}
     if [[ ${target} == "prod" ]]; then
@@ -40,7 +40,6 @@ for target in $(ggrep -oP "FROM \S+ AS (\S+)" Dockerfile | awk '{print $4}' | tr
     set -x
     docker buildx build --load \
         ${CACHE_FROM} \
-        --cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max \
         --progress plain \
         --target ${target} \
         --tag ${fullname} \

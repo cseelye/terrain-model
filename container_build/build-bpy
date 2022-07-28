@@ -3,7 +3,7 @@ set -euo pipefail
 
 export BLENDER_BRANCH=${BLENDER_BRANCH-"blender-v3.1-release"}
 export BLENDER_LIB_BRANCH=${BLENDER_LIB_BRANCH-"$(echo ${BLENDER_BRANCH} | tr -d v)"}
-export CORES=${CORES-8}
+export CORES=${CORES-$(getconf _NPROCESSORS_ONLN)}
 export WORK_DIR=${BLENDER_WORK_DIR-/blender-build}
 export BLENDER_DEST=${BLENDER_DEST-/opt/blender}
 export BPY_DEST=${BPY_DEST-/opt/bpy/site-packages}
@@ -25,9 +25,11 @@ if [[ ! -e ${WORK_DIR}/lib ]]; then
     fi
     attempt=1
     time until svn --non-interactive checkout https://svn.blender.org/svnroot/bf-blender/tags/${BLENDER_LIB_BRANCH}/lib/linux_centos7_x86_64; do
-        pushd ${WORK_DIR}/lib/linux_centos7_x86_64
-        svn cleanup
-        popd
+        if [[ -e ${WORK_DIR}/lib/linux_centos7_x86_64 ]]; then
+            pushd ${WORK_DIR}/lib/linux_centos7_x86_64
+            svn cleanup
+            popd
+        fi
         ((attempt++))
         # Sleep with exponential backoff and jitter
         sleep $(python3 -c "import random; print(random.uniform(10, min(240, 10 * 2 ** ${attempt})))")
@@ -55,14 +57,14 @@ cmake \
     -DCMAKE_BUILD_TYPE_INIT:STRING=MinSizeRel \
     -DPYTHON_SITE_PACKAGES=${BPY_DEST}
 
-# Configure build for blender app
-cmake \
-    -C"${WORK_DIR}/blender-src/build_files/cmake/config/blender_release.cmake" \
-    -H"${WORK_DIR}/blender-src" \
-    -B"${WORK_DIR}/build_linux_release" \
-    -DCMAKE_BUILD_TYPE_INIT:STRING=MinSizeRel \
-    -DCMAKE_INSTALL_PREFIX=${BLENDER_DEST}
-popd
+# # Configure build for blender app
+# cmake \
+#     -C"${WORK_DIR}/blender-src/build_files/cmake/config/blender_release.cmake" \
+#     -H"${WORK_DIR}/blender-src" \
+#     -B"${WORK_DIR}/build_linux_release" \
+#     -DCMAKE_BUILD_TYPE_INIT:STRING=MinSizeRel \
+#     -DCMAKE_INSTALL_PREFIX=${BLENDER_DEST}
+# popd
 
 # Build python library
 echo ">>> Building bpy module"
@@ -70,8 +72,16 @@ pushd ${WORK_DIR}/build_linux_bpy
 time make -j${CORES} install
 popd
 
-# Build blender app
-echo ">>> Building blender"
-pushd ${WORK_DIR}/build_linux_release
-time make -j${CORES} install
-popd
+# # Build blender app
+# echo ">>> Building blender"
+# pushd ${WORK_DIR}/build_linux_release
+# time make -j${CORES} install
+# popd
+
+# Remove the source and build directories to save a few gigs
+#rm -rf ${WORK_DIR}
+
+# Download pre-built blender app
+curl -f https://download.blender.org/release/Blender3.1/blender-3.1.2-linux-x64.tar.xz -o blender.tar.xz
+mkdir -p ${BLENDER_DEST}
+tar -xf blender.tar.xz -C ${BLENDER_DEST} --strip-components 1

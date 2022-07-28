@@ -1,5 +1,5 @@
 {
-	"name": "terrain-model dev container",
+	"name": "terrain-model.dev",
 	"image": "ghcr.io/cseelye/terrain-model.dev",
 	"extensions": [
 		"ms-python.python",

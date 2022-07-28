@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NAME=${NAME:-terrain-model}
-REPO=${REPO-ghcr.io/cseelye} # Allow this to be empty
+REPO=${REPO:-ghcr.io/cseelye}
 TAG=${TAG-latest}
 
 if [[ -n ${REPO} ]]; then
@@ -11,7 +11,14 @@ else
     IMAGE_NAME=${NAME}
 fi
 
-for stage in base build_gdal build_blender build_py_modules prod dev; do
-    docker image push ${IMAGE_NAME}.${stage}:${TAG}
+
+for stage in prod dev; do
+(
+    fullname=${IMAGE_NAME}.${target}:${TAG}
+    if [[ ${target} == "prod" ]]; then
+        fullname=${IMAGE_NAME}:${TAG}
+    fi
+    set -x
+    docker image push ${fullname}
+)
 done
-docker image push ${IMAGE_NAME}:${TAG}
