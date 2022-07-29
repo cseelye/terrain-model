@@ -3,7 +3,8 @@ set -euo pipefail
 NAME=${NAME:-terrain-model}
 REPO=${REPO:-ghcr.io/cseelye}
 TAG=${TAG-latest}
-CACHE_REPO=${CACHE_REPO:-cseelye}
+CACHE_REPO=${CACHE_REPO:-ghcr.io/cseelye}
+LOAD=${LOAD:-0}
 
 if [[ -n ${REPO} ]]; then
     IMAGE_NAME=${REPO}/${NAME}
@@ -20,6 +21,11 @@ else
     exit 1
 fi
 
+load=""
+if [[ ${LOAD} -eq 1 ]]; then
+    load="--load"
+fi
+
 # This build process uses buildx remote layer caching, so docker must be logged into the registry being used with permissions to push
 
 # Explicitly build/tag the intermediate layers
@@ -27,6 +33,7 @@ for stage in base build_py_modules build_gdal build_blender; do
 (
     set -x
     docker buildx build \
+        --pull \
         --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
         --cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max \
         --progress plain \
@@ -41,6 +48,8 @@ done
 stage=prod
 set -x
 docker buildx build \
+    --pull \
+    ${load} \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.base-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \
@@ -58,6 +67,8 @@ docker buildx build \
 stage=dev
 set -x
 docker buildx build \
+    --pull \
+    ${load} \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.base-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \

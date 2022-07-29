@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 NAME := terrain-model
 REPO := ghcr.io/cseelye
-CACHE_REPO := cseelye	# docker hub supports cache layers, while GCR does not
+CACHE_REPO := ghcr.io/cseelye	# docker hub supports cache layers, while GCR does not
 
 .DEFAULT_GOAL: container
 
@@ -21,7 +21,7 @@ dev-container:
 # Create and tag cache layers for each dockerfile target
 .PHONY: build-cache
 build-cache:
-	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); time container_build/make-cache 2>&1 | tee build-cache.log
+	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); time container_build/make-cache 2>&1 | sed -u 's/^/build-cache | /' | tee build-cache.log
 
 # Empty the layer cache
 .PHONY: prune-cache
@@ -30,15 +30,15 @@ prune-cache:
 
 # Build each target in the dockerfile and tag it as NAME.target
 .PHONY: tagged
-tagged:
-	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); time container_build/make-tagged 2>&1 | tee build.log
+tagged: build-cache
+	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); time container_build/make-tagged 2>&1 | sed -u 's/^/tagged | /' | tee build.log
 
 # Build the usable artifacts - runtime and dev containers
-.PHONY: final
-final:
-	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); time container_build/make-final 2>&1 | tee build.log
+.PHONY: images
+images: build-cache
+	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); export TARGETS="prod dev"; time container_build/make-tagged 2>&1 | sed -u 's/^/images | /' | tee build.log
 
 # Push the already built runtime and build images
 .PHONY: push
-push:
-	export NAME=$(NAME); export REPO=$(REPO); container_build/make-push
+push: build-cache
+	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); container_build/make-push

@@ -39,13 +39,7 @@ jobs:
           fi
           echo "::set-output name=date_tag::$(date +'%Y%m%d')"
 
-      - name: Build container images
-        run: |
-          make build-cache
-          make final TAG=${{ steps.vars.outputs.date_tag }}
-          make final TAG=latest
-
-      - name: Push container images
+      - name: Build and push container images
         if: steps.vars.outputs.publish
         run:
           make push TAG=${{ steps.vars.outputs.date_tag }}
