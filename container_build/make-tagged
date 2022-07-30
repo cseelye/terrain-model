@@ -21,7 +21,7 @@ else
     exit 1
 fi
 
-all_targets=( $(ggrep -oP "FROM \S+ AS (\S+)" Dockerfile | awk '{print $4}' | tr '\n' ' ' | tac -s ' ') )
+all_targets=( $(perl -ne 'print "$1\n" if /FROM \S+ AS (\S+)/s' Dockerfile) )
 
 if [[ -z ${TARGETS} ]]; then
     TARGETS=("${all_targets[@]}")
