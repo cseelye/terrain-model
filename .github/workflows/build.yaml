@@ -1,6 +1,7 @@
 name: Build/Test
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - '*'
@@ -29,18 +30,28 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v2
 
+      - name: Log context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+
       - name: Set variables
         id: vars
         run: |
-          if [[ "${{github.base_ref}}" == "main" || "${{github.ref}}" == "refs/heads/main" ]]; then
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
               echo "::set-output name=publish::true"
           else
               echo "::set-output name=publish::false"
           fi
           echo "::set-output name=date_tag::$(date +'%Y%m%d')"
+          echo "::set-output name=branch_name::${{ github.head_ref || github.ref_name }}"
 
-      - name: Build and push container images
-        if: steps.vars.outputs.publish
+      - name: Build container images
+        run: |
+          make tagged PUSH_CACHE=0 LOAD=0 TAG=${{ steps.vars.outputs.branch_name }}-${{ steps.vars.outputs.date_tag }}
+
+      - name: Push container images
+        if: steps.vars.outputs.publish == 'true'
         run: |
           make push PUSH_CACHE=1 TAG=${{ steps.vars.outputs.date_tag }}
           make push TAG=latest
