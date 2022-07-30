@@ -286,9 +286,9 @@ COPY --from=build_py_modules /root/.local ${BLENDER_DEST}/${BLENDER_VERSION_SHOR
 
 
 #
-# Production image stage
+# Runtime image stage
 #
-FROM base AS prod
+FROM base AS runtime
 LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model runtime container"
@@ -369,7 +369,7 @@ COPY *.py gtm* LICENSE /opt/terrain-model/
 # Dev image stage - adds tools useful for development but not necessary for
 # runtime
 #
-FROM prod AS dev
+FROM runtime AS dev
 LABEL org.opencontainers.image.source=https://github.com/cseelye/terrain-model
 LABEL org.opencontainers.image.licenses=MIT
 LABEL org.opencontainers.image.description="terrain-model development container"

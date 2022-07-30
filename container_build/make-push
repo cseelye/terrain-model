@@ -33,10 +33,10 @@ for target in $(perl -ne 'print "$1\n" if /FROM \S+ AS (\S+)/s' Dockerfile); do
         --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache"
 done
 
-for target in prod dev; do
+for target in runtime dev; do
 
     fullname=${IMAGE_NAME}.${target}:${TAG}
-    if [[ ${target} == "prod" ]]; then
+    if [[ ${target} == "runtime" ]]; then
         fullname=${IMAGE_NAME}:${TAG}
     fi
     if [[ ${PUSH_CACHE} -eq 1 ]]; then

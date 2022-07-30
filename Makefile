@@ -8,7 +8,7 @@ CACHE_REPO := ghcr.io/cseelye	# docker hub supports cache layers, while GCR does
 # Build the container image
 .PHONY: container
 container:
-	docker image build --tag=$(NAME) --target=prod .
+	docker image build --tag=$(NAME) --target=runtime .
 
 # Build the dev container image
 .PHONY: dev-container
@@ -36,7 +36,7 @@ tagged: build-cache
 # Build just the usable artifacts - runtime and dev containers
 .PHONY: images
 images: build-cache
-	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); export TARGETS="prod dev"; time container_build/make-tagged 2>&1 | sed -u 's/^/images | /' | tee build.log
+	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); export TARGETS="runtime dev"; time container_build/make-tagged 2>&1 | sed -u 's/^/images | /' | tee build.log
 
 # Push the already built runtime and build images
 .PHONY: push

@@ -56,7 +56,7 @@ for target in ${TARGETS[@]}; do
         cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max"
     fi
     fullname=${IMAGE_NAME}.${target}:${TAG}
-    if [[ ${target} == "prod" ]]; then
+    if [[ ${target} == "runtime" ]]; then
         fullname=${IMAGE_NAME}:${TAG}
     fi
     set -x

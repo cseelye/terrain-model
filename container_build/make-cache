@@ -51,7 +51,7 @@ done
 
 # Build runtime image
 (
-stage=prod
+stage=runtime
 if [[ ${PUSH_CACHE} -eq 1 ]]; then
     cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max"
 fi
@@ -85,7 +85,7 @@ docker buildx build \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_blender-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.prod-buildcache \
+    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.runtime-buildcache \
     --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
     ${cache_to} \
     --progress plain \
