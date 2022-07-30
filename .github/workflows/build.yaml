@@ -41,6 +41,6 @@ jobs:
 
       - name: Build and push container images
         if: steps.vars.outputs.publish
-        run:
-          make push TAG=${{ steps.vars.outputs.date_tag }}
+        run: |
+          make push PUSH_CACHE=1 TAG=${{ steps.vars.outputs.date_tag }}
           make push TAG=latest

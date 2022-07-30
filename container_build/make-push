@@ -4,6 +4,8 @@ NAME=${NAME:-terrain-model}
 REPO=${REPO:-ghcr.io/cseelye}
 TAG=${TAG-latest}
 CACHE_REPO=${CACHE_REPO:-ghcr.io/cseelye}
+PUSH_CACHE=${PUSH_CACHE:-0}
+LOAD=${LOAD:-0}
 
 if [[ -n ${REPO} ]]; then
     IMAGE_NAME=${REPO}/${NAME}
@@ -21,31 +23,47 @@ else
 fi
 
 # This build process uses buildx remote layer caching, so docker must be logged into the registry being used with permissions to pull and push
+cache_to=""
 
 # Build cache-from args so each build can pull from every cache layer
 # Normally this is only useful when the cache is incomplete
-CACHE_FROM=""
+cache_from=""
 for target in $(perl -ne 'print "$1\n" if /FROM \S+ AS (\S+)/s' Dockerfile); do
-    CACHE_FROM="${CACHE_FROM} \
+    cache_from="${cache_from} \
         --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache"
 done
 
 for target in prod dev; do
-(
+
     fullname=${IMAGE_NAME}.${target}:${TAG}
     if [[ ${target} == "prod" ]]; then
         fullname=${IMAGE_NAME}:${TAG}
     fi
+    if [[ ${PUSH_CACHE} -eq 1 ]]; then
+        cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max"
+    fi
+    (
     set -x
     docker buildx build \
         --pull \
         --push \
-        --load \
-        ${CACHE_FROM} \
-        --cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max \
+        ${cache_from} \
+        ${cache_to} \
         --progress plain \
         --target ${target} \
         --tag ${fullname} \
         .
-)
+    )
+    if [[ ${LOAD} -eq 1 ]]; then
+    (
+    set -x
+    docker buildx build \
+        --load \
+        ${cache_from} \
+        --progress plain \
+        --target ${target} \
+        --tag ${fullname} \
+        .
+    )
+    fi
 done

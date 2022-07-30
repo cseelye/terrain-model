@@ -33,7 +33,7 @@ prune-cache:
 tagged: build-cache
 	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); time container_build/make-tagged 2>&1 | sed -u 's/^/tagged | /' | tee build.log
 
-# Build the usable artifacts - runtime and dev containers
+# Build just the usable artifacts - runtime and dev containers
 .PHONY: images
 images: build-cache
 	export NAME=$(NAME); export REPO=$(REPO); export CACHE_REPO=$(CACHE_REPO); export TARGETS="prod dev"; time container_build/make-tagged 2>&1 | sed -u 's/^/images | /' | tee build.log
