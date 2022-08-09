@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euETo pipefail
+shopt -s inherit_errexit
+
 NAME=${NAME:-terrain-model}
 REPO=${REPO:-ghcr.io/cseelye}
 TAG=${TAG-latest}
@@ -14,8 +16,12 @@ else
     IMAGE_NAME=${NAME}
 fi
 
+cache_type="registry"
 if [[ -n ${CACHE_REPO} ]]; then
     CACHE_IMAGE_NAME=${CACHE_REPO}/${NAME}
+    if [[ "${CACHE_REPO}" == "local" ]]; then
+        cache_type="registry,registry.insecure=true"
+    fi
 elif [[ -n ${REPO} ]]; then
     CACHE_IMAGE_NAME=${REPO}:${NAME}
 else
@@ -45,7 +51,7 @@ cache_to=""
 cache_from=""
 for target in ${all_targets[@]}; do
     cache_from="${cache_from} \
-        --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache"
+        --cache-from ref=${CACHE_IMAGE_NAME}.${target}-buildcache,type=${cache_type}"
 done
 
 # Explicitly build/tag all targets
@@ -53,7 +59,7 @@ echo "Building targets ${TARGETS[@]}"
 for target in ${TARGETS[@]}; do
 (
     if [[ ${PUSH_CACHE} -eq 1 ]]; then
-        cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max"
+        cache_to="--cache-to ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max,type=${cache_type}"
     fi
     fullname=${IMAGE_NAME}.${target}:${TAG}
     if [[ ${target} == "runtime" ]]; then
@@ -68,5 +74,5 @@ for target in ${TARGETS[@]}; do
         --target ${target} \
         --tag ${fullname} \
         .
-)
+) 2>&1 | sed -u 's/^/'${target}' | /'
 done

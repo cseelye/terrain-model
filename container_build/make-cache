@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -euETo pipefail
+shopt -s inherit_errexit
+
 NAME=${NAME:-terrain-model}
 REPO=${REPO:-ghcr.io/cseelye}
 TAG=${TAG-latest}
@@ -13,8 +15,12 @@ else
     IMAGE_NAME=${NAME}
 fi
 
+cache_type="registry"
 if [[ -n ${CACHE_REPO} ]]; then
     CACHE_IMAGE_NAME=${CACHE_REPO}/${NAME}
+    if [[ "${REPO}" == "local" ]]; then
+        cache_type="registry,registry.insecure=true"
+    fi
 elif [[ -n ${REPO} ]]; then
     CACHE_IMAGE_NAME=${REPO}:${NAME}
 else
@@ -32,64 +38,64 @@ fi
 cache_to=""
 
 # Explicitly build/tag the intermediate layers
-for stage in base build_py_modules build_gdal build_blender; do
+for target in base build_py_modules build_gdal build_blender; do
 (
     if [[ ${PUSH_CACHE} -eq 1 ]]; then
-        cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max"
+        cache_to="--cache-to ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max,type=${cache_type}"
     fi
     set -x
     docker buildx build \
         --pull \
-        --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
+        --cache-from ref=${CACHE_IMAGE_NAME}.${target}-buildcache,type=${cache_type} \
         ${cache_to} \
         --progress plain \
-        --target ${stage} \
-        --tag ${IMAGE_NAME}.${stage}:${TAG} \
+        --target ${target} \
+        --tag ${IMAGE_NAME}.${target}:${TAG} \
         .
-)
+) 2>&1 | sed -u 's/^/'${target}' | /'
 done
 
 # Build runtime image
 (
-stage=runtime
+target=runtime
 if [[ ${PUSH_CACHE} -eq 1 ]]; then
-    cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max"
+    cache_to="--cache-to ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max,type=${cache_type}"
 fi
 set -x
 docker buildx build \
     --pull \
     ${load} \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.base-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_blender-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
+    --cache-from ref=${CACHE_IMAGE_NAME}.base-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.build_blender-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.${target}-buildcache,type=${cache_type} \
     ${cache_to} \
     --progress plain \
-    --target ${stage} \
+    --target ${target} \
     --tag ${IMAGE_NAME}:${TAG} \
     .
-)
+) 2>&1 | sed -u 's/^/runtime | /'
 
 # Build dev image
 (
-stage=dev
+target=dev
 if [[ ${PUSH_CACHE} -eq 1 ]]; then
-    cache_to="--cache-to type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache,mode=max"
+    cache_to="--cache-to ref=${CACHE_IMAGE_NAME}.${target}-buildcache,mode=max,type=${cache_type}"
 fi
 set -x
 docker buildx build \
     --pull \
     ${load} \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.base-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.build_blender-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.runtime-buildcache \
-    --cache-from type=registry,ref=${CACHE_IMAGE_NAME}.${stage}-buildcache \
+    --cache-from ref=${CACHE_IMAGE_NAME}.base-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.build_py_modules-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.build_gdal-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.build_blender-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.runtime-buildcache,type=${cache_type} \
+    --cache-from ref=${CACHE_IMAGE_NAME}.${target}-buildcache,type=${cache_type} \
     ${cache_to} \
     --progress plain \
-    --target ${stage} \
-    --tag ${IMAGE_NAME}.${stage}:${TAG} \
+    --target ${target} \
+    --tag ${IMAGE_NAME}.${target}:${TAG} \
     .
-)
+) 2>&1 | sed -u 's/^/dev | /'
