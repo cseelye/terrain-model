@@ -282,7 +282,7 @@ ARG PROJ_INSTALL_PREFIX
 RUN /build-bpy
 
 # Install python modules into blender's python
-COPY --from=build_py_modules /root/.local ${BLENDER_DEST}/${BLENDER_VERSION_SHORT}/python/lib/python3.10/site-packages/
+COPY --from=build_py_modules /root/.local ${BLENDER_DEST}/${BLENDER_VERSION_SHORT}/python/
 
 
 #
@@ -357,6 +357,9 @@ COPY --from=build_py_modules /root/.local /usr/
 
 # Run ldconfig to make sure shared libraries are configured correctly
 RUN ldconfig
+
+# Start the x server in the background when the container is launched interactively
+RUN echo "Xvfb :0 -screen 0 800x600x24 &" >> /root/.bashrc
 
 ENV DISPLAY=:0
 ENV PATH="${PATH}:/opt/blender:/opt/terrain-model"
