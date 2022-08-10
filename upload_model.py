@@ -71,27 +71,40 @@ def upload_model(model_file,
             materials[mat_id] = mat
 
     # Wait for shapeways processing to complete
-    log.info("Waiting for model processing...")
+    log.info("Waiting for model processing and price quote...")
     api_url = f"https://api.shapeways.com/models/{model_id}/v1"
     api_headers = { "Authorization": f"Bearer {access_token}"}
+
+    show_printable = True
     while True:
         with requests.get(api_url, headers=api_headers) as r:
             r.raise_for_status()
             resp = r.json()
+
+        # Wait for printable
         if resp["printable"] == "processing":
             time.sleep(10)
             continue
-        elif resp["printable"] == "yes":
-            log.passed("Finished processing, model is printable")
-            for mat_id, mat in materials.items():
-                if mat_id in resp["materials"]:
-                    log.info(f"    {mat['title']} - ${resp['materials'][mat_id]['price']:.2f}")
+        if resp["printable"] == "yes" and show_printable:
+            log.passed("Model is printable")
             log.info(resp["urls"]["editModelUrl"]["address"])
-            break
+            show_printable = False
         else:
             log.error(f"Model is not printable: {resp['printable']}")
             log.error(resp["urls"]["editModelUrl"]["address"])
             break
+
+        # Wait for price quote
+        prices = []
+        for mat_id, mat in materials.items():
+            if mat_id in resp["materials"]:
+                if resp['materials'][mat_id]['price'] <= 0:
+                    time.sleep(10)
+                    continue
+                prices.append(f"    {mat['title']} - ${resp['materials'][mat_id]['price']:.2f}")
+        for line in prices:
+            log.info(line)
+        break
 
 
 if __name__ == '__main__':
