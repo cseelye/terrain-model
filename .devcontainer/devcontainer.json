@@ -4,5 +4,9 @@
 	"extensions": [
 		"ms-python.python",
 		"cseelye.vscode-allofthem"
+	],
+	"runArgs": [
+		"--name",
+		"${localEnv:USER}.terrain-model.dev"
 	]
 }
