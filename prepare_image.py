@@ -33,6 +33,7 @@ from util import Color
     "track_width" : (PositiveNonZeroIntegerType(), 10),
     "max_width" : (PositiveIntegerType(), 2048),
     "max_height" : (PositiveIntegerType(), 2048),
+    # "remove_color_cast": (BoolType(), False),
     "input_files" : (OptionalValueType(ItemList(StrType())), None),
     "output_file" : (StrType(), None),
     "cache_dir" : (StrType(), "cache"),
@@ -49,6 +50,7 @@ def main(gpx_file,
          track_width,
          max_width,
          max_height,
+        #  remove_color_cast,
          input_files,
          output_file,
          cache_dir):
@@ -209,6 +211,38 @@ def main(gpx_file,
         log.info(f"Resizing image to ({new_width}, {new_height})")
         img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
 
+
+    # # Remove color cast
+    # if remove_color_cast:
+    #     import skimage.exposure
+        
+    #     # convert to HSV
+    #     hsv = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+
+    #     # separate channels
+    #     h,s,v = cv2.split(hsv)
+
+    #     # reverse the hue channel by 180 deg out of 360, so in python add 90 and modulo 180
+    #     h_new = (h + 90) % 180
+
+    #     # combine new hue with old sat and value
+    #     hsv_new = cv2.merge([h_new,s,v])
+
+    #     # convert back to BGR
+    #     bgr_new = cv2.cvtColor(hsv_new,cv2.COLOR_HSV2BGR)
+
+    #     # Get the average color of bgr_new
+    #     ave_color = cv2.mean(bgr_new)[0:3]
+
+    #     # create a new image with the average color
+    #     color_img = np.full_like(img, ave_color)
+
+    #     # make a 50-50 blend of img and color_img
+    #     blend = cv2.addWeighted(img, 0.5, color_img, 0.5, 0.0)
+
+    #     # stretch dynamic range
+    #     img = skimage.exposure.rescale_intensity(blend, in_range='image', out_range=(0,255)).astype(np.uint8)
+
     # Write the target image
     cv2.imwrite(str(output_file), img)
 
@@ -231,6 +265,7 @@ if __name__ == '__main__':
     parser.add_argument("-r", "--track-width", type=PositiveNonZeroIntegerType(), default=20, metavar="PIXELS", help="The width of the track to draw, in pixels")
     parser.add_argument("-x", "--max-width", type=PositiveIntegerType(), default=2048, metavar="PIXELS", help="Resize to a maximum width, in pixels")
     parser.add_argument("-y", "--max-height", type=PositiveIntegerType(), default=2048, metavar="PIXELS", help="Resize to a maximum height, in pixels")
+    # parser.add_argument("-m", "--rcc", dest="remove_color_cast", action="store_true", help="Auto-remove color cast. Helps correct some images")
     parser.add_argument("-i", "--input-file", dest="input_files", type=StrType(), action="append", metavar="FILENAME", help="One or more input files, in a raster format that GDAL can read. If these are not specified, the script will look for image files in the cache")
     parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Output file (PNG format)")
     parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to look for image files in, if input-file was not specified")
