@@ -17,7 +17,6 @@ from pyapputil.exceptutil import ApplicationError
 from pyapputil.shellutil import Shell
 import requests
 
-from gtm1.geotrimesh import mesh
 from gtm2.generate_terrain import generate_terrain as gtm2_generate_terrain
 from util import download_file, list_like
 
@@ -322,8 +321,8 @@ def raster_stats(data_source):
 
     gx_size = (max_long - min_long) / float(data_source.RasterXSize)
     gy_size = (max_lat - min_lat) / float(data_source.RasterYSize)
-    log.info(f"  alt degree size = {max_long - min_long}")
-    log.info(f"  alt one pixel degrees = {gx_size, gy_size}")
+    # log.info(f"  alt degree size = {max_long - min_long}")
+    # log.info(f"  alt one pixel degrees = {gx_size, gy_size}")
 
     px_per_deg = float(data_source.RasterXSize) / (max_long - min_long)
     log.info(f"  px per degree = {px_per_deg}")
@@ -612,28 +611,6 @@ def convert_and_crop_raster(input_filename, output_filename, min_lat, min_long, 
     log.debug(f"  LRg = {out_data['geo']['max_x'], out_data['geo']['min_y']}")
     log.debug(f"  LRi = {out_data['image']['max_x'], out_data['image']['min_y']}")
     log.debug(f"  LRp = {out_data['pixel']['max_x'], out_data['pixel']['max_y']}")
-
-
-def dem_to_model(dem_filename, model_filename, z_exaggeration=1.0):
-    """
-    Convert a DEM file to an x3d model file.
-
-    Args:
-        dem_filename:       (string) Name of the input DEM data file.
-        model_filename:     (string) Name of the output file to create.
-        z_exaggeration:     (float)  Multiplier to appy to the Z elevation
-                                     values.
-    """
-    log = GetLogger()
-
-    outdir = os.path.dirname(os.path.abspath(model_filename))
-    outprefix = os.path.basename(model_filename).split(".")[0]
-
-    elevation = mesh.ElevationMesh(log)
-    elevation.generate_mesh(dem=str(dem_filename),
-                            mesh_path=outdir,
-                            mesh_prefix=outprefix,
-                            z_exaggeration=z_exaggeration)
 
 def dem_to_model2(dem_filename, model_filename, z_exaggeration=1.0):
     """
