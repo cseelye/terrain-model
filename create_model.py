@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
-"""Import x3d/stl into blender and make a nice model"""
+"""Run a script in Blender to finish the model"""
 
 from pathlib import Path
+import re
+import subprocess
 import sys
+from zipfile import ZipFile, ZIP_DEFLATED
 
 from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
-from pyapputil.typeutil import ValidateAndDefault, StrType
+from pyapputil.typeutil import ValidateAndDefault, StrType, OptionalValueType
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
-import bpy
-from mathutils import Vector #type: ignore #pylint: disable=import-error
-
-from blender_util import extrude_and_flatten, select_obj, get_obj_dimensions, resize_obj, simplify_faces
+from pyapputil.exceptutil import InvalidArgumentError
 
 @logargs
 @ValidateAndDefault({
@@ -21,88 +20,113 @@ from blender_util import extrude_and_flatten, select_obj, get_obj_dimensions, re
     "output_file": (StrType(), None),
     "min_thickness": (float, 0.125),
     "size": (float, None),
+    "map_image": (StrType(), None),
+    "background_image": (StrType(), None),
+    "preview_file": (OptionalValueType(StrType()), None),
+    "collada_file": (OptionalValueType(StrType()), None),
 })
-def refine_model(mesh_file,
-			     output_file,
+def create_model(mesh_file,
+                 output_file,
                  min_thickness,
                  size,
+                 map_image,
+                 background_image,
+                 preview_file,
+                 collada_file,
 ):
     log = GetLogger()
-    import_path = Path(mesh_file).absolute().resolve()  # blender sometimes crashes with relative paths so make sure they are absolute
-    output_path = Path(output_file).absolute().resolve()
 
-    if not import_path.exists():
-        raise InvalidArgumentError("Mesh file does not exist")
+    output_file = Path(output_file).resolve()
 
-    # Delete default object
-    log.info("Cleaning workspace")
-    bpy.ops.object.mode_set(mode="OBJECT")
-    for obj in bpy.context.scene.objects:
-        if obj.type == "MESH":
-            obj.select_set(True)
-    bpy.ops.object.delete()
+    # # Make the texture file paths relative to the blender file path. This makes it work inside and outside the container
+    # background_image = Path(background_image).resolve()
+    # if not background_image.exists():
+    #     raise InvalidArgumentError("Background image file does not exist")
+    # map_image = Path(map_image).resolve()
+    # if not map_image.exists():
+    #     raise InvalidArgumentError("Map image file does not exist")
 
-    # Set the display units to inches
-    bpy.context.scene.unit_settings.system = 'IMPERIAL'
-    bpy.context.scene.unit_settings.length_unit = 'INCHES'
+    # try:
+    #     background_image_rel = background_image.relative_to(output_file.parent)
+    #     map_image_rel = map_image.relative_to(output_file.parent)
+    # except ValueError as ex:
+    #     raise InvalidArgumentError("Image files must be relative subpaths to blender file") from ex
 
-    # Import the model
-    log.info(f"Importing {import_path}")
-    if import_path.suffix == ".x3d":
-        bpy.ops.import_scene.x3d(filepath=str(import_path))
-    elif import_path.suffix == ".stl":
-        bpy.ops.import_mesh.stl(filepath=str(import_path))
-    else:
-        raise ApplicationError(f"Unknown file type '{import_path.suffix}'")
+    background_image = Path(background_image)
+    map_image = Path(map_image)
 
-    # Select the mesh we just imported
-    obj = select_obj()
+    if not preview_file:
+        preview_file = output_file.with_name("preview.png")
 
-    # Resize the object
-    dims = get_obj_dimensions(obj)
-    log.info(f"Imported dimensions: ({dims})")
-    idx = 0
-    if dims[1] > dims[0]:
-        idx = 1
-    dim_scale = size / dims[idx]
-    log.info(f"Scale factor = {dim_scale}")
-    resize_obj(obj, dim_scale)
-    dims = get_obj_dimensions(obj)
-    log.info(f"Resized dimensions: {dims}")
+    if not collada_file:
+        collada_file = output_file.with_suffix(".dae")
+    collada_file = Path(collada_file)
 
-    # Add thickness
-    log.info("Extruding and flattening bottom")
-    obj = select_obj()
-    extrude_and_flatten(obj, min_thickness)
+    zip_file = output_file.with_suffix(".zip")
 
-    # Make the sides of the model a single face each
-    simplify_faces(obj)
+    # Get the current directory to add to the PYTHONPATH for blender
+    cwd = Path(sys.path[0]).resolve()
 
-    # Move the object so that its base is along the Z=0 plane
-    log.info("Normalizing object to Z=0 plane")
-    log.debug(f"location = {obj.location.z}")
-    log.debug(f"w location = {(obj.matrix_world @ obj.location).z}")
-    lowest_z = None
-    for vert in obj.data.vertices:
-        v_world = obj.matrix_world @ Vector((vert.co[0],vert.co[1],vert.co[2]))
-        if lowest_z is None or lowest_z > v_world[2]:
-            lowest_z = v_world[2]
-    obj.location.z = obj.location.z - lowest_z
+    blender_path = "/opt/blender/blender"
+    parts = [
+        f"PYTHONPATH={cwd}",
+        blender_path,
+        "-noaudio",
+        "--python-use-system-env",
+        "--python",
+        "internal_create_model.py",
+    ]
+    if any([mesh_file, output_file, min_thickness, size, map_image, background_image, preview_file, collada_file]):
+        parts += ["--"]
+    if mesh_file:
+        parts += ["--mesh-file", str(mesh_file)]
+    if output_file:
+        parts += ["--output-file", str(output_file)]
+    if min_thickness:
+        parts += ["--min-thickness", str(min_thickness)]
+    if size:
+        parts += ["--size", str(size)]
+    if map_image:
+        parts += ["--map-image", str(map_image)]
+    if background_image:
+        parts += ["--background-image", str(background_image)]
+    if preview_file:
+        parts += ["--preview-file", str(preview_file)]
+    if collada_file:
+        parts += ["--collada-file", str(collada_file)]
+    # parts += ["-d", "-d"]
 
-    log.info(f"Saving {output_path}")
-    bpy.ops.wm.save_as_mainfile(filepath=str(output_path))
+    cmd = " ".join(parts)
+    log.info("Invoking blender...")
 
-    log.passed(f"Successfully created model {output_file}")
+    with subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+        # Stream the output from blender and the script to the screen
+        for line in iter(process.stdout.readline, b''):
+            line = line.strip()
+            # Detect formatted output from the script and write stdout vs output from blender and send to log
+            if re.search(rb"^\d{4}-\d{2}-\d{2}", line):
+                sys.stdout.write(line.decode(sys.stdout.encoding) + "\n")
+            else:
+                log.info(f"  blender: {line.decode('utf-8')}")
+        process.wait()
+        retcode = process.returncode
+
+    if retcode != 0:
+        log.error("Failed to create model")
+        return False
+
+    log.info("Creating archive")
+    with ZipFile(zip_file, "w", compression=ZIP_DEFLATED) as archive:
+        archive.write(str(collada_file), collada_file.name)
+        archive.write(str(background_image), background_image.name)
+        archive.write(str(map_image), map_image.name)
+    log.info(f"Created archive {zip_file}")
+
+    collada_file.unlink()
+
+    log.passed("Successfully created model")
     return True
 
-
-def filter_args(argv):
-    if not argv:
-        return []
-    # If this is being invoked inside blender, filter out the blender args and return the rest
-    if argv[0].endswith("lender") and "--" in argv:
-        return argv[argv.index("--") + 1:]
-    return argv[1:]
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Import x3d/stl mesh and build a nice model")
@@ -110,8 +134,12 @@ if __name__ == '__main__':
     parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Blender file to save")
     parser.add_argument("-t", "--min-thickness", type=float, metavar="INCHES", help="Minimum base thickness of the object")
     parser.add_argument("-s", "--size", type=float, metavar="INCHES", help="Size of the long side of the object, other dimensions will be scaled proportionally")
+    parser.add_argument("-a", "--map-image", type=StrType(), metavar="FILENAME", help="image to map over the top of the model")
+    parser.add_argument("-i", "--background-image", type=StrType(), metavar="FILENAME", help="image to map over the sides and bottom of the model")
+    parser.add_argument("-p", "--preview-file", required=False, type=StrType(), metavar="FILENAME", help="path to save preview image")
+    parser.add_argument("-c", "--collada-file", required=False, type=StrType(), metavar="FILENAME", help="path to save collada export")
 
-    args = parser.parse_args_to_dict(filter_args(sys.argv))
+    args = parser.parse_args_to_dict()
 
-    app = PythonApp(refine_model, args)
+    app = PythonApp(create_model, args)
     app.Run(**args)

@@ -34,23 +34,16 @@ docker container run --rm -it -v $(pwd):/work -w /work ghcr.io/cseelye/terrain-m
 ```
 <p align="center"><img src="example_mesh.png" alt="example image"/></p>
 
-3. Convert the mesh to a blender model, size it to something printable, add thickness, square off the bottom, etc.
+3. Convert the mesh to a blender model, map the image onto it, size it to something printable, etc, and export and zip the model into a file ready to upload for printing:
 ```
 ./create_model.py --mesh-file work/hitw.stl \
                   --min-thickness 0.125 \
                   --size 4.5 \
-                  --output output/hitw.blend
-```
-
-4. The last step isn't polished yet; it hasn't been containerized, so it requires installing Blender 3.1 on your machine, installing the required python modules, running the script directly on your machine (not in the container), and it only runs on macOS. Eventually this step and the previous will be combined into a single script that will run in the container.  
-UV map the image onto the model, export and zip the model into a file ready to upload for printing:
-```
-./finish_model.py --blender-file output/hitw.blend \
                   --map-image output/hitw.png \
-                  --background-image output/lightgrey.png
+                  --background-image output/lightgrey.png \
+                  --output-file output/hitw.blend
 ```
-Alternately you can manually open the model in blender, UV map the image onto it, and export it as a Collada file. Zip the collada file and image files into a single archive.
-
+Alternately you can manually create a model in blender from the STL, UV map the image onto it, make whatever changes you want, and export it as a Collada file. Zip the collada file and image files into a single archive.
 <p align="center"><img src="example_blender3.png" alt="example image"/></p>
 
 5. Create a [Shapeways](https://www.shapeways.com) account and upload for printing (when manually uploading, make sure to select "M" for meters as the dimensions when uploading). To use the script for automatic uploading, you will need to register to use the [Shapeways API](https://developers.shapeways.com/manage-apps) and get a client ID and secret.

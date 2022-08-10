@@ -1,12 +1,12 @@
 """Helper functions for working with blender models"""
 
-from math import degrees
+from math import degrees, radians
 
 from pyapputil.logutil import GetLogger
 
 import bpy
-import bmesh
-from mathutils import Vector
+import bmesh  #type: ignore #pylint: disable=import-error
+from mathutils import Vector, Euler  #type: ignore #pylint: disable=import-error
 
 METER_TO_INCH = 39.37007874
 
@@ -350,3 +350,34 @@ def deselect_all(screen):
     override['region'] = region
     with ModeSet("OBJECT"):
         bpy.ops.object.select_all(override, action='DESELECT')
+
+def finish_model_in_blender(preview_file):
+    log = GetLogger()
+
+    log.info("UV mapping textures onto model")
+    # Change the view to top/orthographic and project it to a UV map
+    layout_screen = bpy.data.workspaces["Layout"].screens[0]
+    set_top_view(layout_screen)
+    set_zoomed_view(layout_screen)
+    project_uv(layout_screen)
+
+    log.info("Updating 3d view")
+    # Get out of editing mode and set the view to render the UV mapped material
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.select_all(action='DESELECT')
+    set_rendered_view(layout_screen)
+
+    # Rotate the model to make it easy to look at
+    area, _ = get_view3d_area_region(layout_screen)
+    v3d = area.spaces.active.region_3d
+    v3d.view_rotation = Euler((radians(60), 0, radians(45)), 'XYZ').to_quaternion()
+    v3d.view_perspective = 'PERSP'
+
+    # Save the changes
+    log.info("Saving model")
+    bpy.ops.wm.save_mainfile()
+
+    # Take a screenshot of the rendered view
+    # bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+    bpy.context.scene.render.filepath = preview_file
+    bpy.ops.render.opengl(write_still=True)
