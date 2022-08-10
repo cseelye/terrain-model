@@ -1,5 +1,5 @@
 affine==2.3.1
-lxml==4.8.0
+lxml==4.9.1
 numpy==1.22.0
 pathlib==1.0.1
 pyapputil==1.1.8
