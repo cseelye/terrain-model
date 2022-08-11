@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - '*'
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.drawio'
 
 jobs:
   build:
