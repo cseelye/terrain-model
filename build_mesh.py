@@ -10,6 +10,7 @@ from pyapputil.logutil import GetLogger, logargs
 from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
 
 from geo import GPXFile, dem_to_model2, get_cropped_elevation_filename, get_dem_data
+from util import MetadataFile
 
 @logargs
 @ValidateAndDefault({
@@ -50,7 +51,9 @@ def build_mesh(gpx_file,
         mesh_file:     (str)   File name to write the 3D mesh to
         z_exaggeration: (float) How much Z-axis exaggeration to apply to the mesh
     """
+    localargs = locals()
     log = GetLogger()
+
 
     # Determine the bounds of the output
     if gpx_file and None in (min_lat, min_long, max_lat, max_long):
@@ -67,7 +70,11 @@ def build_mesh(gpx_file,
     if not dem_filename and None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area")
 
+    metadata = MetadataFile(mesh_file)
+    metadata.add("args", localargs)
+
     log.info(f"mesh boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
+    metadata.add("mesh_bounds", {"min_lat":min_lat, "min_long":min_long, "max_lat":max_lat, "max_long":max_long})
 
     # Get the elevation data
     if dem_filename:
@@ -90,6 +97,9 @@ def build_mesh(gpx_file,
     # Create the mesh from the elevation data
     log.info("Creating 3D mesh from elevation data")
     dem_to_model2(input_file, mesh_file, z_exaggeration)
+
+    # Write metadata file
+    metadata.write()
 
     log.passed(f"Successfully created mesh {mesh_file}")
     return True

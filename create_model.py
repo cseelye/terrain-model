@@ -11,7 +11,8 @@ from pyapputil.appframework import PythonApp
 from pyapputil.argutil import ArgumentParser
 from pyapputil.typeutil import ValidateAndDefault, StrType, OptionalValueType
 from pyapputil.logutil import GetLogger, logargs
-from pyapputil.exceptutil import InvalidArgumentError
+
+from util import MetadataFile
 
 @logargs
 @ValidateAndDefault({
@@ -34,23 +35,13 @@ def create_model(mesh_file,
                  preview_file,
                  collada_file,
 ):
+    localargs = locals()
     log = GetLogger()
 
     output_file = Path(output_file).resolve()
 
-    # # Make the texture file paths relative to the blender file path. This makes it work inside and outside the container
-    # background_image = Path(background_image).resolve()
-    # if not background_image.exists():
-    #     raise InvalidArgumentError("Background image file does not exist")
-    # map_image = Path(map_image).resolve()
-    # if not map_image.exists():
-    #     raise InvalidArgumentError("Map image file does not exist")
-
-    # try:
-    #     background_image_rel = background_image.relative_to(output_file.parent)
-    #     map_image_rel = map_image.relative_to(output_file.parent)
-    # except ValueError as ex:
-    #     raise InvalidArgumentError("Image files must be relative subpaths to blender file") from ex
+    metadata = MetadataFile(output_file)
+    metadata.add("args", localargs)
 
     background_image = Path(background_image)
     map_image = Path(map_image)
@@ -123,6 +114,9 @@ def create_model(mesh_file,
     log.info(f"Created archive {zip_file}")
 
     collada_file.unlink()
+
+    # Write metadata file
+    metadata.write()
 
     log.passed("Successfully created model")
     return True

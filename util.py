@@ -4,7 +4,10 @@ try:
     import collections.abc as collections
 except ImportError:
     import collections
-
+from datetime import datetime, timezone
+import json
+from pathlib import Path
+import sys
 from time import time
 
 from pyapputil.logutil import GetLogger
@@ -12,6 +15,36 @@ from pyapputil.exceptutil import ApplicationError, InvalidArgumentError
 from pyapputil.typeutil import IntegerRangeType, ItemList
 import requests
 import webcolors
+
+def default_json(obj):
+    """Default serializer for json.dumps"""
+    if hasattr(obj, 'to_json'):
+        return obj.to_json()
+    raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
+
+
+class MetadataFile:
+    """Sidecar file to hold metadata"""
+    def __init__(self, parent_file):
+        self.meta = {}
+        self.parent_file = Path(parent_file)
+        self.meta_file = self.parent_file.with_suffix(self.parent_file.suffix + ".meta")
+        self.add("cmdline", " ".join(sys.argv))
+        self.add("help", """ Latitude:   -90s to 90n degrees, north positive, south negative, Y axis
+ Longtitude: -180w to 180e degrees, east positive, west negative, X axis
+ North: max_lat
+ South: min_lat
+ East: max_long
+ West: min_long
+ Upper Left = N,W or max_lat, min_long
+ Lower Right = S,E or min_lat, max_long""")
+
+    def add(self, key, value):
+        self.meta[key] = value
+
+    def write(self):
+        self.meta["created"] = datetime.utcnow().replace(tzinfo=timezone.utc).astimezone().replace(microsecond=0).isoformat()
+        self.meta_file.write_text(json.dumps(self.meta, default=default_json, indent=2), encoding="utf-8")
 
 class UnauthorizedError(ApplicationError):
     """Raised when a 401 or similar error is encountered"""
@@ -37,7 +70,7 @@ def list_like(thing):
     """Check of the argument is an iterable but not a string"""
     return isinstance(thing, collections.Iterable) and not isinstance(thing, str)
 
-class Color:
+class Color():
     """A named or RBG color"""
 
     def __init__(self):
@@ -48,12 +81,21 @@ class Color:
         self.parse(inVal)
         return self
 
+    def __str__(self):
+        return self.name
+
     def __repr__(self):
         if self.name:
             return f"Color({self.name})"
         if self.rgb:
             return f"Color({self.rgb})"
         return "Color"
+
+    def to_json(self):
+        if self.name:
+            return str(self.name)
+        if self.rgb:
+            return str(self.rgb)
 
     def parse(self, color):
         """Initialize this Color object from a string color name or tuple of RGB"""

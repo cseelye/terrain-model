@@ -2,6 +2,7 @@
 """Crop, convert, and draw a track onto an orthoimage"""
 
 from pathlib import Path
+import sys
 import tempfile
 
 from affine import Affine
@@ -16,7 +17,7 @@ from osgeo import gdal, osr
 import numpy as np
 
 from geo import GPXFile, get_raster_boundaries_gps, convert_and_crop_raster, GDAL_ERROR, get_cropped_image_filename, get_image_data
-from util import Color
+from util import Color, MetadataFile
 
 @logargs
 @ValidateAndDefault({
@@ -33,7 +34,6 @@ from util import Color
     "track_width" : (PositiveNonZeroIntegerType(), 10),
     "max_width" : (PositiveIntegerType(), 2048),
     "max_height" : (PositiveIntegerType(), 2048),
-    # "remove_color_cast": (BoolType(), False),
     "input_files" : (OptionalValueType(ItemList(StrType())), None),
     "output_file" : (StrType(), None),
     "cache_dir" : (StrType(), "cache"),
@@ -50,7 +50,6 @@ def main(gpx_file,
          track_width,
          max_width,
          max_height,
-        #  remove_color_cast,
          input_files,
          output_file,
          cache_dir):
@@ -75,6 +74,7 @@ def main(gpx_file,
                                         cache will be searched for image files that cover the requested area
         output_file:    (str)           Output file to create, in PNG format
     """
+    localargs = locals()
     log = GetLogger()
 
     if not output_file.endswith("png"):
@@ -83,6 +83,9 @@ def main(gpx_file,
     if draw_track and not gpx_file:
         log.error("Missing GPX file")
         return False
+
+    metadata = MetadataFile(output_file)
+    metadata.add("args", localargs)
 
     # Determine the bounds of the output
     if gpx_file and None in (min_lat, min_long, max_lat, max_long):
@@ -96,6 +99,7 @@ def main(gpx_file,
     if None in (min_lat, min_long, max_lat, max_long):
         raise InvalidArgumentError("You must specify an area to crop")
     log.debug(f"Requested crop boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
+    metadata.add("output_bounds_reqested", {"min_lat":min_lat, "min_long":min_long, "max_lat":max_lat, "max_long":max_long})
 
     # If there was no input file specified, first look in the local cache and then try to download appropriate files
     cache_dir = Path(cache_dir)
@@ -131,6 +135,7 @@ def main(gpx_file,
     # Calculate the extent from the input file
     source_min_lat, source_min_long, source_max_lat, source_max_long = get_raster_boundaries_gps(ds)
     log.debug(f"Source boundaries top(max_lat)={source_max_lat} left(min_long)={source_min_long} bottom(min_lat)={source_min_lat} right(max_long)={source_max_long}")
+    metadata.add("input_bounds", {"min_lat": source_min_lat, "min_long": source_min_long, "max_lat": source_max_lat, "max_long": source_max_long})
 
     # Adjust output crop as necessary to fit the source image
     adjust = False
@@ -149,6 +154,7 @@ def main(gpx_file,
     if adjust:
         log.info("Output boundary is outside of input boundary")
         log.info(f"New crop boundaries top(max_lat)={max_lat} left(min_long)={min_long} bottom(min_lat)={min_lat} right(max_long)={max_long}")
+    metadata.add("output_bounds_adjusted", {"min_lat":min_lat, "min_long":min_long, "max_lat":max_lat, "max_long":max_long})
 
     # Convert the image and crop to geo boundaries, save to intermediate file
     _, intermediate_file = tempfile.mkstemp()
@@ -211,40 +217,11 @@ def main(gpx_file,
         log.info(f"Resizing image to ({new_width}, {new_height})")
         img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
 
-
-    # # Remove color cast
-    # if remove_color_cast:
-    #     import skimage.exposure
-        
-    #     # convert to HSV
-    #     hsv = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
-
-    #     # separate channels
-    #     h,s,v = cv2.split(hsv)
-
-    #     # reverse the hue channel by 180 deg out of 360, so in python add 90 and modulo 180
-    #     h_new = (h + 90) % 180
-
-    #     # combine new hue with old sat and value
-    #     hsv_new = cv2.merge([h_new,s,v])
-
-    #     # convert back to BGR
-    #     bgr_new = cv2.cvtColor(hsv_new,cv2.COLOR_HSV2BGR)
-
-    #     # Get the average color of bgr_new
-    #     ave_color = cv2.mean(bgr_new)[0:3]
-
-    #     # create a new image with the average color
-    #     color_img = np.full_like(img, ave_color)
-
-    #     # make a 50-50 blend of img and color_img
-    #     blend = cv2.addWeighted(img, 0.5, color_img, 0.5, 0.0)
-
-    #     # stretch dynamic range
-    #     img = skimage.exposure.rescale_intensity(blend, in_range='image', out_range=(0,255)).astype(np.uint8)
-
     # Write the target image
     cv2.imwrite(str(output_file), img)
+
+    # Write metadata file
+    metadata.write()
 
     log.passed(f"Successfully wrote {output_file}")
     return True
@@ -265,7 +242,6 @@ if __name__ == '__main__':
     parser.add_argument("-r", "--track-width", type=PositiveNonZeroIntegerType(), default=20, metavar="PIXELS", help="The width of the track to draw, in pixels")
     parser.add_argument("-x", "--max-width", type=PositiveIntegerType(), default=2048, metavar="PIXELS", help="Resize to a maximum width, in pixels")
     parser.add_argument("-y", "--max-height", type=PositiveIntegerType(), default=2048, metavar="PIXELS", help="Resize to a maximum height, in pixels")
-    # parser.add_argument("-m", "--rcc", dest="remove_color_cast", action="store_true", help="Auto-remove color cast. Helps correct some images")
     parser.add_argument("-i", "--input-file", dest="input_files", type=StrType(), action="append", metavar="FILENAME", help="One or more input files, in a raster format that GDAL can read. If these are not specified, the script will look for image files in the cache")
     parser.add_argument("-o", "--output-file", type=StrType(), metavar="FILENAME", help="Output file (PNG format)")
     parser.add_argument("-c", "--cache-dir", type=StrType(), default="cache", metavar="DIRNAME", help="Directory to look for image files in, if input-file was not specified")
