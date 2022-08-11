@@ -67,7 +67,12 @@ def upload_model(model_file,
         resp = r.json()
     materials = {}
     for mat_id, mat in resp["materials"].items():
-        if mat["title"] in ("Glossy Full Color Sandstone", "Natural Full Color Sandstone", "Matte High Definition Full Color", "Standard High Definition Full Color"):
+        if mat["title"] in ("Glossy Full Color Sandstone",
+                            "Natural Full Color Sandstone",
+                            "Matte High Definition Full Color",
+                            "Standard High Definition Full Color",
+                            "Smooth Full Color Nylon 12 (MJF)",
+                            "Natural Full Color Nylon 12 (MJF)"):
             materials[mat_id] = mat
 
     # Wait for shapeways processing to complete
