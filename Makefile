@@ -46,6 +46,11 @@ images: build-cache
 push: build-cache
 	container_build/make-push
 
+# Do a local build with a local cache repo
+.PHONY: local
+local:
+	$(MAKE) tagged REPO=local CACHE_REPO=localhost:50000 LOAD=1 PUSH_CACHE=1
+
 .PHONY: env
 env:
 	export
