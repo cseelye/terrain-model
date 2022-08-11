@@ -16,6 +16,8 @@ scripts
 *.psd
 *.aux.xml
 *.gpx
+*.yml
+*.yaml
 
 
 # Byte-compiled / optimized / DLL files
