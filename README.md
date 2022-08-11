@@ -5,7 +5,7 @@ This tool will create a 3D model in Blender given a set of GPS coordinates. I bu
 </p>
 
 ## Quick Start
-These are the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "work" to hold the input/output files. *Note this is built to work with The National Map, a US resource, so regions outside the US may not be able to automatically download imagery/elevation data.*
+These are the typical steps that I follow to create a new model.  All of these commands are run inside the container, with a host directory mounted at "/host" to hold the input/output files. *Note this is built to work with The National Map, a US resource, so regions outside the US may not be able to automatically download imagery/elevation data.*
 
 1. Create a directory for your model and put a copy of your gpx file into it:
 ```
@@ -13,12 +13,12 @@ mkdir mymodel
 cp ~/Downloads/track.gpx mymodel/mymodel.gpx
 ```
 
-1. Launch the container:
+2. Launch the container:
 ```
 docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-model
 ```
 
-1. Download and crop the image(s) and preview what the result looks like. Now is a good time to adjust to exactly the coordinates you want the model to cover using the various options to specify the area. Play around with this until you are happy and get the coordinates exactly right.
+3. Download and crop the image(s) and preview what the result looks like. Now is a good time to adjust to exactly the coordinates you want the model to cover using the various options to specify the area. Play around with this until you are happy and get the coordinates exactly right.
 ```
 ./prepare_image.py --gpx-file mymodel/mymodel.gpx \
                    --padding 0.2 \
@@ -29,7 +29,7 @@ docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-m
 ```
 <p align="center"><img src="example_image.png" alt="example image"/></p>
 
-1. Download elevation data and create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the features more prominent - sometimes this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
+4. Download elevation data and create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the features more prominent - sometimes this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
 ```
 ./build_mesh.py --gpx-file mymodel/mymodel.gpx \
                  --padding 0.2 \
@@ -38,7 +38,7 @@ docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-m
 ```
 <p align="center"><img src="example_mesh.png" alt="example image"/></p>
 
-1. Convert the mesh to a blender model, map the image onto it, size it to something printable, etc, and export and zip the model into a file ready to upload for printing:
+5. Convert the mesh to a blender model, map the image onto it, size it to something printable, etc, and export and zip the model into a file ready to upload for printing:
 ```
 ./create_model.py --mesh-file mymodel/mymodel.stl \
                   --min-thickness 0.125 \
@@ -50,7 +50,7 @@ docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-m
 Alternately you can manually create a model in blender from the STL, UV map the image onto it, make whatever changes you want, and export it as a Collada file. Zip the collada file and image files into a single archive.
 <p align="center"><img src="example_blender3.png" alt="example image"/></p>
 
-1. Create a [Shapeways](https://www.shapeways.com) account and upload for printing (when manually uploading, make sure to select "M" for meters as the dimensions when uploading). To use the script for automatic uploading, you will need to register to use the [Shapeways API](https://developers.shapeways.com/manage-apps) and get a client ID and secret.
+6. Create a [Shapeways](https://www.shapeways.com) account and upload for printing (when manually uploading, make sure to select "M" for meters as the dimensions when uploading). To use the script for automatic uploading, you will need to register to use the [Shapeways API](https://developers.shapeways.com/manage-apps) and get a client ID and secret.
 Upload the archive created from the previous step to Shapeways:
 ```
 ./upload_model.py --client-id myClientID \
