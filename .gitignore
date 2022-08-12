@@ -12,7 +12,6 @@ scripts
 *.tif
 *.tiff
 *.jp2
-*.png
 *.psd
 *.aux.xml
 *.gpx
