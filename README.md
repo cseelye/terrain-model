@@ -20,7 +20,7 @@ docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-m
 
 3. Download and crop the image(s) and preview what the result looks like. Now is a good time to adjust to exactly the coordinates you want the model to cover using the various options to specify the area. Play around with this until you are happy and get the coordinates exactly right.
 ```
-./prepare_image.py --gpx-file mymodel/mymodel.gpx \
+prepare_image.py --gpx-file mymodel/mymodel.gpx \
                    --padding 0.2 \
                    --track-color red \
                    --track-width 10 \
@@ -31,7 +31,7 @@ docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-m
 
 4. Download elevation data and create the mesh, using the same coordinates from the previous steps. Try the Z exaggeration if you want to make the features more prominent - sometimes this makes the model more interesting and closer to what it "felt" like in real life in areas without large elevation changes.
 ```
-./build_mesh.py --gpx-file mymodel/mymodel.gpx \
+build_mesh.py --gpx-file mymodel/mymodel.gpx \
                  --padding 0.2 \
                  --z-exaggeration 2 \
                  --mesh-file mymodel/mymodel.stl
@@ -40,7 +40,7 @@ docker container run --rm -it -v $(pwd):/host -w /host ghcr.io/cseelye/terrain-m
 
 5. Convert the mesh to a blender model, map the image onto it, size it to something printable, etc, and export and zip the model into a file ready to upload for printing:
 ```
-./create_model.py --mesh-file mymodel/mymodel.stl \
+create_model.py --mesh-file mymodel/mymodel.stl \
                   --min-thickness 0.125 \
                   --size 4.5 \
                   --map-image mymodel/mymodel.png \
@@ -53,7 +53,7 @@ Alternately you can manually create a model in blender from the STL, UV map the 
 6. Create a [Shapeways](https://www.shapeways.com) account and upload for printing (when manually uploading, make sure to select "M" for meters as the dimensions when uploading). To use the script for automatic uploading, you will need to register to use the [Shapeways API](https://developers.shapeways.com/manage-apps) and get a client ID and secret.
 Upload the archive created from the previous step to Shapeways:
 ```
-./upload_model.py --client-id myClientID \
+upload_model.py --client-id myClientID \
                   --client-secret myClientSecret \
                   --model-file mymodel/mymodel.zip
 ```
