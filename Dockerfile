@@ -37,7 +37,7 @@ RUN ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime && \
     apt-get update && \
     apt-get install --yes \
         locales=2.31-0ubuntu9.9 \
-        tzdata=2022a-0ubuntu0.20.04 \
+        tzdata=2022c-0ubuntu0.20.04.0 \
     && \
     apt-get autoremove --yes && apt-get clean && rm -rf /var/lib/apt/lists/* && \
     locale-gen "en_US.UTF-8"
@@ -48,7 +48,7 @@ ENV LANG=en_US.UTF-8 \
 RUN apt-get update && \
     apt-get install --yes \
         ca-certificates \
-        curl=7.68.0-1ubuntu2.12 \
+        curl=7.68.0-1ubuntu2.13 \
         gnupg=2.2.19-3ubuntu2.2 \
         libreadline5=5.2+dfsg-3build3 \
         libncurses6=6.2-0ubuntu2 \
@@ -176,7 +176,7 @@ RUN apt-get update && \
         build-essential=12.8ubuntu1.1 \
         ca-certificates \
         cmake=3.16.3-1ubuntu1 \
-        curl=7.68.0-1ubuntu2.12 \
+        curl=7.68.0-1ubuntu2.13 \
         git=1:2.25.1-1ubuntu3.5 \
         gnupg=2.2.19-3ubuntu2.2 \
         libtool=2.4.6-14 \
@@ -186,11 +186,11 @@ RUN apt-get update && \
 
 # PROJ dependencies
 RUN apt-get install --yes \
-        libcurl4-gnutls-dev \
-        libsqlite3-dev \
-        libtiff5-dev \
-        sqlite3 \
-        zlib1g-dev
+        libcurl4-gnutls-dev=7.68.0-1ubuntu2.13 \
+        libsqlite3-dev=3.31.1-4ubuntu0.3 \
+        libtiff5-dev=4.1.0+git191117-2ubuntu0.20.04.3 \
+        sqlite3=3.31.1-4ubuntu0.3 \
+        zlib1g-dev=1:1.2.11.dfsg-2ubuntu1.3
 
 # GDAL dependencies
 RUN apt-get install --yes \
@@ -199,7 +199,7 @@ RUN apt-get install --yes \
         libjpeg-dev=8c-2ubuntu8 \
         libopenjp2-7-dev=2.3.1-1ubuntu4.20.04.1 \
         libpng-dev=1.6.37-2 \
-        libpq-dev=12.11-0ubuntu0.20.04.1 \
+        libpq-dev=12.12-0ubuntu0.20.04.1\
         libssl-dev=1.1.1f-1ubuntu2.16 \
         libwebp-dev=0.6.1-2ubuntu0.20.04.1 \
         libxerces-c-dev=3.2.2+debian-1build3 \
@@ -296,14 +296,14 @@ LABEL org.opencontainers.image.description="terrain-model runtime container"
 # Install runtime dependencies for PROJ and GDAL
 RUN apt-get update && \
     apt-get install --yes \
-        libcurl4=7.68.0-1ubuntu2.12 \
+        libcurl4=7.68.0-1ubuntu2.13 \
         libexpat1=2.2.9-1ubuntu0.4 \
         libgeos-3.8.0=3.8.0-1build1 \
         libgeos-c1v5=3.8.0-1build1 \
         libjpeg-turbo8=2.0.3-0ubuntu1.20.04.1 \
         libopenjp2-7=2.3.1-1ubuntu4.20.04.1 \
         libpng16-16=1.6.37-2 \
-        libpq5=12.11-0ubuntu0.20.04.1 \
+        libpq5=12.12-0ubuntu0.20.04.1\
         libsqlite3-0=3.31.1-4ubuntu0.3 \
         libssl1.1=1.1.1f-1ubuntu2.16 \
         libtiff5=4.1.0+git191117-2ubuntu0.20.04.3 \
